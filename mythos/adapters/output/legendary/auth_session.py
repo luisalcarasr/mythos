@@ -31,12 +31,21 @@ class LegendaryAuthSession(AuthSessionRepository):
         Exchange an Epic authorisation code for a session.
 
         legendary's ``auth_code()`` method does the OAuth exchange and
-        persists the token automatically.
+        persists the token automatically.  It returns ``False`` (instead
+        of raising) when Epic rejects the code, so we must check the
+        return value explicitly.
         """
         try:
-            self._gw.core.auth_code(authorization_code)
+            success = self._gw.core.auth_code(authorization_code)
         except Exception as exc:
             raise AuthenticationError(f"Login failed: {exc}") from exc
+
+        if not success:
+            raise AuthenticationError(
+                "Epic rejected the authorisation code. "
+                "The code may have already been used or has expired — "
+                "please open the login page again and use the new code."
+            )
 
         return self._build_session_dict()
 
@@ -60,10 +69,14 @@ class LegendaryAuthSession(AuthSessionRepository):
     def _build_session_dict(self) -> dict:
         try:
             ud = self._gw.core.lgd.userdata
+            if ud is None:
+                raise AuthenticationError("Session data is empty after login.")
             return {
                 "display_name": ud.get("displayName", ""),
                 "account_id": ud.get("account_id", ""),
                 "access_token": ud.get("access_token", ""),
             }
+        except AuthenticationError:
+            raise
         except Exception as exc:
             raise AuthenticationError(f"Could not read session data: {exc}") from exc

@@ -11,6 +11,7 @@ types lives here.  If legendary renames fields, only this file changes.
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
@@ -47,16 +48,41 @@ def legendary_game_to_domain(lg_game: Any) -> Game:
     """
     app_name = AppName(lg_game.app_name)
 
-    # Extract cover image URL from metadata / keyImages
+    # Extract cover image URLs from metadata / keyImages
+    # Vertical cover (used in library grid cards)
+    _VERTICAL_PRIORITY = (
+        "DieselStoreFrontTall",   # 1280×1440 (8:9)  — main vertical
+        "DieselGameBoxTall",      # 1200×1600 (3:4)  — vertical fallback
+        "TakeoverTall",           # 1280×1440 (8:9)  — rare vertical
+        "Thumbnail",              # 400×400   (1:1)  — square
+    )
+    # Horizontal / wide cover (used in detail page hero)
+    _HORIZONTAL_PRIORITY = (
+        "DieselStoreFrontWide",   # 1920×1080 (16:9)
+        "OfferImageWide",         # ~2560×1440 (16:9)
+        "DieselGameBox",          # 2560×1440 (16:9)
+    )
     cover_url = ""
+    cover_url_wide = ""
     try:
         key_images = lg_game.metadata.get("keyImages", [])
         for img in key_images:
-            if img.get("type") in ("DieselGameBoxTall", "DieselGameBox", "Thumbnail"):
+            img_type = img.get("type", "")
+            if not cover_url and img_type in _VERTICAL_PRIORITY:
                 cover_url = img.get("url", "")
+                if cover_url:
+                    break  # stop once we find best vertical
+        # Find best horizontal
+        for img in key_images:
+            img_type = img.get("type", "")
+            if img_type in _HORIZONTAL_PRIORITY:
+                cover_url_wide = img.get("url", "")
                 break
+        # Fallbacks
         if not cover_url and key_images:
             cover_url = key_images[0].get("url", "")
+        if not cover_url_wide and cover_url:
+            cover_url_wide = cover_url
     except Exception:  # noqa: BLE001
         pass
 
@@ -75,8 +101,42 @@ def legendary_game_to_domain(lg_game: Any) -> Game:
 
     # Description
     description = ""
+    long_description = ""
     try:
-        description = lg_game.metadata.get("description", {}).get("shortDescription", "")
+        desc = lg_game.metadata.get("description", {})
+        description = desc.get("shortDescription", "")
+        long_description = desc.get("longDescription", "")
+    except Exception:  # noqa: BLE001
+        pass
+
+    # Categories (extract meaningful labels from Epic's internal paths)
+    categories: list[str] = []
+    try:
+        cat_list = lg_game.metadata.get("categories", [])
+        for cat in cat_list:
+            if isinstance(cat, dict):
+                path = cat.get("path", "")
+                if path:
+                    parts = path.split("/")
+                    if len(parts) >= 2:
+                        # Extract last meaningful segment, e.g. "games/action" → "Action"
+                        segment = parts[-1]
+                        # Skip internal metadata segments
+                        if segment.lower() not in ("base", "edition", "games", "applications", "addons"):
+                            label = segment.replace("-", " ").replace("_", " ").strip().title()
+                            if label and label not in categories:
+                                categories.append(label)
+    except Exception:  # noqa: BLE001
+        pass
+
+    # Release date
+    release_date: Optional[datetime] = None
+    try:
+        release_info = lg_game.metadata.get("releaseInfo", [])
+        if release_info and isinstance(release_info, list):
+            date_str = release_info[0].get("dateAdded", "")
+            if date_str:
+                release_date = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
     except Exception:  # noqa: BLE001
         pass
 
@@ -97,7 +157,11 @@ def legendary_game_to_domain(lg_game: Any) -> Game:
         developer=developer,
         publisher=publisher,
         description=description,
+        long_description=long_description,
+        categories=categories,
+        release_date=release_date,
         cover_url=cover_url,
+        cover_url_wide=cover_url_wide,
         is_dlc=is_dlc,
         supports_cloud_saves=supports_cloud_saves,
     )
@@ -129,4 +193,7 @@ def legendary_installed_to_domain(lg_installed: Any) -> InstalledInfo:
         platform=platform,
         install_size=install_size,
         executable=getattr(lg_installed, "executable", ""),
+        can_run_offline=getattr(lg_installed, "can_run_offline", False),
+        launch_parameters=getattr(lg_installed, "launch_parameters", ""),
+        save_path=getattr(lg_installed, "save_path", "") or "",
     )

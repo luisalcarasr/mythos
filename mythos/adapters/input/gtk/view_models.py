@@ -12,6 +12,7 @@ of touching domain entities directly.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -25,38 +26,73 @@ class GameViewModel:
     app_name: str
     title: str
     developer: str
+    publisher: str
+    description: str
+    long_description: str
     cover_path: Optional[Path]
     cover_url: str
+    cover_wide_path: Optional[Path]
+    cover_url_wide: str
     status: GameStatus
     is_installed: bool
     install_path: str
     version: str
     install_size_human: str
+    platform: str
+    executable: str
     needs_update: bool
     supports_cloud_saves: bool
     is_dlc: bool
     can_launch: bool
     can_install: bool
+    categories: list[str]
+    release_date: Optional[datetime]
+    release_date_human: str
+    can_run_offline: bool
+    launch_parameters: str
+    save_path: str
 
     @staticmethod
     def from_game(game: Game) -> "GameViewModel":
         info = game.installed_info
+
+        # Format release date
+        release_date_human = ""
+        if game.release_date:
+            try:
+                release_date_human = game.release_date.strftime("%B %d, %Y")
+            except Exception:
+                pass
+
         return GameViewModel(
             app_name=str(game.app_name),
             title=game.title,
             developer=game.developer,
+            publisher=game.publisher,
+            description=game.description,
+            long_description=game.long_description,
             cover_path=game.cover_local_path,
             cover_url=game.cover_url,
+            cover_wide_path=game.cover_local_wide_path,
+            cover_url_wide=game.cover_url_wide,
             status=game.status,
             is_installed=game.is_installed,
             install_path=str(info.install_path) if info else "",
             version=info.version if info else "",
             install_size_human=info.install_size.human_readable() if info else "",
+            platform=str(info.platform.value) if info else "",
+            executable=info.executable if info else "",
             needs_update=game.needs_update,
             supports_cloud_saves=game.supports_cloud_saves,
             is_dlc=game.is_dlc,
             can_launch=game.can_launch,
             can_install=game.can_install,
+            categories=game.categories,
+            release_date=game.release_date,
+            release_date_human=release_date_human,
+            can_run_offline=info.can_run_offline if info else False,
+            launch_parameters=info.launch_parameters if info else "",
+            save_path=info.save_path if info else "",
         )
 
     @property
@@ -64,10 +100,10 @@ class GameViewModel:
         labels = {
             GameStatus.NOT_INSTALLED: "Not Installed",
             GameStatus.INSTALLED: "Installed",
-            GameStatus.INSTALLING: "Installing…",
-            GameStatus.UPDATING: "Updating…",
-            GameStatus.REPAIRING: "Repairing…",
-            GameStatus.UNINSTALLING: "Uninstalling…",
+            GameStatus.INSTALLING: "Installing\u2026",
+            GameStatus.UPDATING: "Updating\u2026",
+            GameStatus.REPAIRING: "Repairing\u2026",
+            GameStatus.UNINSTALLING: "Uninstalling\u2026",
             GameStatus.QUEUED: "Queued",
             GameStatus.RUNNING: "Running",
             GameStatus.ERROR: "Error",
@@ -117,4 +153,5 @@ class LibraryViewModel:
         if self.search_query:
             q = self.search_query.lower()
             games = [g for g in games if q in g.title.lower() or q in g.developer.lower()]
+        games.sort(key=lambda g: (0 if g.is_installed else 1, g.title.lower()))
         return games

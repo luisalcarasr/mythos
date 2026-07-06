@@ -28,6 +28,7 @@ from mythos.config.container import Container  # noqa: E402
 from mythos.adapters.input.gtk.view_models import GameViewModel, LibraryViewModel  # noqa: E402
 from mythos.adapters.input.gtk.widgets.game_card import GameCard  # noqa: E402
 from mythos.domain.events import LibraryRefreshCompleted, LibraryRefreshStarted  # noqa: E402
+from mythos.domain.value_objects import AppName  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -78,17 +79,21 @@ class LibraryView(Gtk.Box):
         self._scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
 
         self._flow = Gtk.FlowBox()
-        self._flow.set_max_children_per_line(10)
-        self._flow.set_min_children_per_line(2)
+        self._flow.set_max_children_per_line(4)
+        self._flow.set_min_children_per_line(4)
         self._flow.set_selection_mode(Gtk.SelectionMode.NONE)
-        self._flow.set_homogeneous(True)
+        self._flow.set_homogeneous(False)
         self._flow.set_column_spacing(12)
         self._flow.set_row_spacing(12)
         self._flow.set_margin_top(12)
         self._flow.set_margin_bottom(12)
         self._flow.set_margin_start(12)
         self._flow.set_margin_end(12)
-        self._scrolled.set_child(self._flow)
+
+        clamp = Adw.Clamp()
+        clamp.set_maximum_size(1080)
+        clamp.set_child(self._flow)
+        self._scrolled.set_child(clamp)
 
         self._spinner_overlay.set_child(self._scrolled)
 
@@ -153,19 +158,44 @@ class LibraryView(Gtk.Box):
 
         self._empty_status.set_visible(False)
         for vm in visible:
-            card = GameCard(vm=vm, on_click=self._on_game_clicked)
+            card = GameCard(
+                vm=vm,
+                on_detail=self._on_game_detail,
+                on_install=self._on_game_install,
+                on_launch=self._on_game_launch,
+            )
             self._flow.append(card)
 
-    def _on_game_clicked(self, vm: GameViewModel) -> None:
-        from mythos.adapters.input.gtk.views.game_page import GamePage
-        page = GamePage(container=self._c, vm=vm, window=self._window)
-        # Push into a navigation view or show as dialog
-        dialog = Adw.Dialog()
-        dialog.set_title(vm.title)
-        dialog.set_content_width(800)
-        dialog.set_content_height(600)
-        dialog.set_child(page)
-        dialog.present(self._window)
+    def _on_game_detail(self, vm: GameViewModel) -> None:
+        self._window.show_game_detail(vm)
+
+    def _on_game_install(self, vm: GameViewModel) -> None:
+        def _work() -> None:
+            try:
+                self._c.install_game_use_case.execute(AppName(vm.app_name))
+                GLib.idle_add(self._refresh_library)
+            except Exception as exc:
+                logger.error("Install failed for %s: %s", vm.app_name, exc)
+
+        threading.Thread(target=_work, daemon=True).start()
+
+    def _on_game_launch(self, vm: GameViewModel) -> None:
+        def _work() -> None:
+            try:
+                self._c.launch_game_use_case.execute(AppName(vm.app_name))
+            except Exception as exc:
+                logger.error("Launch failed for %s: %s", vm.app_name, exc)
+
+        threading.Thread(target=_work, daemon=True).start()
+
+    def _refresh_library(self) -> None:
+        def _work() -> None:
+            try:
+                self._c.refresh_library_use_case.execute()
+            except Exception as exc:
+                logger.error("Refresh failed: %s", exc)
+
+        threading.Thread(target=_work, daemon=True).start()
 
     # ---------------------------------------------------------------- #
     # Helpers                                                            #
@@ -188,7 +218,21 @@ class LibraryView(Gtk.Box):
         self._vm.filter_installed_only = btn.get_active()
         self._render()
 
+    def _on_library_refresh_started(self, event: object) -> None:
+        self._set_loading(True)
+
+    def _on_library_refresh_completed(self, event: object) -> None:
+        try:
+            games = self._c.list_library_use_case.execute()
+            from mythos.domain.entities import Game
+            vms = [GameViewModel.from_game(g) for g in games]
+            self._vm.games = vms
+            self._render()
+        except Exception as exc:
+            logger.error("Cache reload error: %s", exc)
+        self._set_loading(False)
+
     def _subscribe_events(self) -> None:
         bus = self._c.event_bus
-        bus.subscribe(LibraryRefreshStarted, lambda e: GLib.idle_add(self._set_loading, True))
-        bus.subscribe(LibraryRefreshCompleted, lambda e: None)  # already handled by thread
+        bus.subscribe(LibraryRefreshStarted, self._on_library_refresh_started)
+        bus.subscribe(LibraryRefreshCompleted, self._on_library_refresh_completed)

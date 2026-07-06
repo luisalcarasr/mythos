@@ -47,6 +47,8 @@ class MythosWindow(Adw.ApplicationWindow):
         self.set_default_size(1280, 780)
         self.set_size_request(900, 600)
 
+        self.connect("close-request", self._on_close_request)
+
         self._build_ui()
         self._connect_events()
         self._check_session()
@@ -148,3 +150,34 @@ class MythosWindow(Adw.ApplicationWindow):
 
     def _on_refresh_clicked(self, btn: Gtk.Button) -> None:
         self._library_view.refresh()
+
+    def _on_close_request(self, window: object) -> bool:
+        logger.info("Window close requested — quitting application.")
+        self.get_application().quit()
+        return False  # allow default destruction
+
+    # ---------------------------------------------------------------- #
+    # Game detail navigation                                              #
+    # ---------------------------------------------------------------- #
+
+    def show_game_detail(self, vm: object) -> None:
+        from mythos.adapters.input.gtk.view_models import GameViewModel
+        from mythos.adapters.input.gtk.views.game_page import GamePage
+
+        page = GamePage(container=self._c, vm=vm, on_back=self._on_back_to_library)
+        name = f"game-{vm.app_name}"
+
+        self._view_stack.add_titled(page, name, vm.title)
+        self._view_stack.set_visible_child_name(name)
+        self._view_switcher.set_visible(False)
+        self._switcher_bar.set_visible(False)
+
+    def _on_back_to_library(self) -> None:
+        name = self._view_stack.get_visible_child_name()
+        if name and name.startswith("game-"):
+            child = self._view_stack.get_visible_child()
+            if child:
+                self._view_stack.remove(child)
+        self._view_stack.set_visible_child_name("library")
+        self._view_switcher.set_visible(True)
+        self._switcher_bar.set_visible(True)

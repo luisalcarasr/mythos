@@ -33,13 +33,11 @@ from mythos.config.container import Container  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
-# Epic Games OAuth constants (same as Legendary / Heroic use)
-_EPIC_AUTH_URL = (
-    "https://www.epicgames.com/id/login?redirectUrl="
-    "https%3A%2F%2Fwww.epicgames.com%2Fid%2Fapi%2Fredirect"
-    "%3FclientId%3D34a02cf8f4414e29b15921876da36f9"
-    "%26responseType%3Dcode"
-)
+# Derive auth URL from Legendary's own EGCAPI to stay in sync
+def _get_epic_auth_url() -> str:
+    from legendary.api.egs import EPCAPI
+    return EPCAPI().get_auth_url()
+
 _REDIRECT_HOST = "www.epicgames.com"
 _REDIRECT_PATH = "/id/api/redirect"
 
@@ -96,7 +94,7 @@ class LoginView(Gtk.Box):
                 webview = WebKit.WebView()
 
             webview.set_vexpand(True)
-            webview.load_uri(_EPIC_AUTH_URL)
+            webview.load_uri(_get_epic_auth_url())
             webview.connect("load-changed", self._on_load_changed)
             self.append(webview)
             logger.debug("LoginView: using WebKitGTK.")
@@ -152,7 +150,7 @@ class LoginView(Gtk.Box):
         box.append(subtitle)
 
         # URL button
-        url_btn = Gtk.LinkButton(uri=_EPIC_AUTH_URL, label="Open Epic Games login page")
+        url_btn = Gtk.LinkButton(uri=_get_epic_auth_url(), label="Open Epic Games login page")
         box.append(url_btn)
 
         # Code entry

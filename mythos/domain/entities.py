@@ -71,11 +71,16 @@ class Game:
     description: str = ""
     cover_url: str = ""
     cover_local_path: Optional[Path] = None
+    cover_url_wide: str = ""
+    cover_local_wide_path: Optional[Path] = None
     genres: list[str] = field(default_factory=list)
     tags: list[str] = field(default_factory=list)
     is_dlc: bool = False
     supports_cloud_saves: bool = False
     last_played: Optional[datetime] = None
+    long_description: str = ""
+    categories: list[str] = field(default_factory=list)
+    release_date: Optional[datetime] = None
 
     # Installation info (None when not installed)
     installed_info: Optional[InstalledInfo] = None
@@ -196,6 +201,9 @@ class InstalledInfo:
     launch_options: LaunchOptions = field(default_factory=LaunchOptions)
     update_available: bool = False
     pid: Optional[int] = None  # set while game is running
+    can_run_offline: bool = False
+    launch_parameters: str = ""
+    save_path: str = ""
 
     @property
     def is_running(self) -> bool:

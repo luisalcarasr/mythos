@@ -228,6 +228,17 @@ class ImageCachePort(ABC):
         May raise ``requests.RequestException`` on network failure.
         """
 
+    @abstractmethod
+    def get_wide(self, app_name: AppName) -> Optional[Path]:
+        """Return the local path to the cached wide (horizontal) cover, or ``None``."""
+
+    @abstractmethod
+    def fetch_and_cache_wide(self, app_name: AppName, url: str) -> Path:
+        """
+        Download the wide (horizontal) cover image at *url*, cache it,
+        and return the path.
+        """
+
 
 # ------------------------------------------------------------------ #
 # Wine runtime port                                                    #

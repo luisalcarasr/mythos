@@ -49,6 +49,27 @@ class DiskImageCache(ImageCachePort):
         return self.store(app_name, response.content)
 
     # ---------------------------------------------------------------- #
+    # Wide (horizontal) covers                                           #
+    # ---------------------------------------------------------------- #
+
+    def get_wide(self, app_name: AppName) -> Optional[Path]:
+        stem = self._stem(app_name) + "_wide"
+        for ext in self.EXTENSIONS:
+            candidate = self._dir / (stem + ext)
+            if candidate.exists():
+                return candidate
+        return None
+
+    def fetch_and_cache_wide(self, app_name: AppName, url: str) -> Path:
+        response = requests.get(url, timeout=15)
+        response.raise_for_status()
+        ext = self._detect_ext(response.content)
+        path = self._dir / (self._stem(app_name) + "_wide" + ext)
+        path.write_bytes(response.content)
+        logger.debug("Cached wide cover for %s → %s", app_name, path)
+        return path
+
+    # ---------------------------------------------------------------- #
     # Helpers                                                            #
     # ---------------------------------------------------------------- #
 

@@ -1,6 +1,6 @@
 [build-system]
 requires = ["setuptools>=68", "wheel"]
-build-backend = "setuptools.backends.legacy:build"
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "mythos"
@@ -24,23 +24,26 @@ classifiers = [
 ]
 requires-python = ">=3.11"
 
-# Runtime deps — PyGObject is installed via the system package manager
-# (pygobject3 / python3-gi) because it requires GTK4 native libs.
-# legendary-gl is the Epic Games CLI/library we use as driven adapter.
+# Runtime deps.
+# pycairo and pygobject require GTK4 native libs installed via the system
+# package manager before running `uv sync`:
+#   brew install pygobject3 gtk4 libadwaita pkg-config gobject-introspection
 dependencies = [
     "legendary-gl>=0.20.34",
     "platformdirs>=4.2.0",
     "requests>=2.32.0",
-]
-
-[project.optional-dependencies]
-dev = [
-    "pytest>=8.2",
-    "pytest-cov>=5.0",
+    "pycairo>=1.27.0",
+    "pygobject>=3.48.0",
 ]
 
 [project.scripts]
 mythos = "mythos.__main__:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.2",
+    "pytest-cov>=5.0",
+]
 
 [tool.setuptools.packages.find]
 where = ["."]

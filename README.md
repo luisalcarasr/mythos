@@ -54,8 +54,9 @@ new adapter that satisfies the same port contract.
 ### System libraries
 
 ```bash
-# macOS (Homebrew)
-brew install pygobject3 gtk4 libadwaita webkitgtk
+# macOS (Homebrew) — also installs pkg-config and gobject-introspection
+# needed to build pycairo/pygobject from source via uv
+brew install pygobject3 gtk4 libadwaita pkg-config gobject-introspection
 
 # Fedora / RHEL
 sudo dnf install python3-gobject gtk4 libadwaita webkit2gtk4.1
@@ -64,12 +65,17 @@ sudo dnf install python3-gobject gtk4 libadwaita webkit2gtk4.1
 sudo apt install python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 gir1.2-webkit-6.0
 ```
 
-### Python packages
+> **macOS note:** `webkitgtk` has no pre-built Homebrew bottle for Apple Silicon
+> and takes hours to build from source. It is only required for the OAuth login
+> WebView. The rest of the application works without it.
+
+### Python tooling
+
+This project uses [**uv**](https://docs.astral.sh/uv/) for dependency management.
 
 ```bash
-pip install legendary-gl platformdirs requests
-# — or —
-pip install -e ".[dev]"
+# Install uv (if not already installed)
+curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
 ---
@@ -77,10 +83,20 @@ pip install -e ".[dev]"
 ## Running
 
 ```bash
+# Install deps and run in one step
+uv run python -m mythos
+
+# Or sync the venv first, then activate it
+uv sync
+source .venv/bin/activate
 python -m mythos
-# — or, after pip install —
-mythos
 ```
+
+> **macOS note:** `pycairo` and `pygobject` are built from source against the
+> Homebrew GTK4 stack. `uv sync` handles the full build automatically once the
+> system libraries above are installed. The application re-execs itself on first
+> launch to set `DYLD_LIBRARY_PATH=/opt/homebrew/lib` so dyld can find the GTK
+> shared libraries at runtime.
 
 ---
 
@@ -89,13 +105,13 @@ mythos
 The unit and fake tests run without any GTK / Legendary installed:
 
 ```bash
-pytest tests/unit tests/fakes
+uv run pytest tests/unit tests/fakes
 ```
 
 Integration tests (require Legendary installed and a valid Epic session):
 
 ```bash
-pytest tests/integration -m integration
+uv run pytest tests/integration -m integration
 ```
 
 ---

@@ -54,11 +54,11 @@ def test_login_returns_session_and_publishes_event() -> None:
 
     session = uc.execute("my-auth-code")
 
-    assert session["display_name"] == "TestUser"
+    assert session["display_name"] == "Demo User"
     assert auth.is_logged_in()
     events = bus.events_of(UserLoggedIn)
     assert len(events) == 1
-    assert events[0].display_name == "TestUser"
+    assert events[0].display_name == "Demo User"
 
 
 def test_logout_clears_session_and_publishes_event() -> None:
@@ -153,7 +153,7 @@ def test_install_game_success() -> None:
     info = uc.execute(app_name=AppName("NewGame"), install_path=Path("/tmp/games"))
 
     assert AppName("NewGame") in store.install_calls
-    assert info.version == "1.0"
+    assert info.version == "1.0.0"
     assert len(bus.events_of(GameInstalled)) == 1
 
 

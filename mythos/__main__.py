@@ -18,6 +18,7 @@ Bootstraps:
 from __future__ import annotations
 
 import logging
+import os
 import sys
 
 # ---------------------------------------------------------------------------
@@ -55,9 +56,28 @@ def _setup_logging() -> None:
     )
 
 
+def _is_fake_mode() -> tuple[bool, list[str]]:
+    """
+    Return (fake_mode, cleaned_argv).
+
+    ``fake_mode`` is True when either:
+      - the ``MYTHOS_FAKE`` environment variable is set (any non-empty value), or
+      - ``--fake`` is present in sys.argv.
+
+    ``cleaned_argv`` is sys.argv with ``--fake`` stripped so GTK does not
+    choke on an unknown flag.
+    """
+    env_fake = bool(os.environ.get("MYTHOS_FAKE", "").strip())
+    flag_fake = "--fake" in sys.argv
+    cleaned = [a for a in sys.argv if a != "--fake"]
+    return (env_fake or flag_fake), cleaned
+
+
 def main() -> int:
     _setup_logging()
     logger = logging.getLogger("mythos")
+
+    fake_mode, clean_argv = _is_fake_mode()
 
     # 1. XDG paths
     from mythos.config.paths import AppPaths
@@ -68,8 +88,17 @@ def main() -> int:
     i18n_setup(get_system_language())
 
     # 3. Dependency container
-    from mythos.config.container import build
-    container = build()
+    if fake_mode:
+        logger.warning(
+            "╔══════════════════════════════════════════╗\n"
+            "║  FAKE / DESIGN MODE — no Epic connection ║\n"
+            "╚══════════════════════════════════════════╝"
+        )
+        from mythos.config.container_fake import build_fake
+        container = build_fake()
+    else:
+        from mythos.config.container import build
+        container = build()
 
     # 4. GTK application
     try:
@@ -86,7 +115,7 @@ def main() -> int:
 
     from mythos.adapters.input.gtk.application import MythosApplication
     app = MythosApplication(container=container)
-    return app.run(sys.argv)
+    return app.run(clean_argv)
 
 
 if __name__ == "__main__":

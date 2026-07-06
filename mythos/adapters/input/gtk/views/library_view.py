@@ -25,6 +25,10 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, GLib, Gtk  # noqa: E402
 
 from mythos.config.container import Container  # noqa: E402
+from mythos.adapters.input.gtk.dialogs.game_settings_dialog import (  # noqa: E402
+    GameSettingsDialog,
+)
+from mythos.adapters.input.gtk.dialogs.edit_game_dialog import EditGameDialog  # noqa: E402
 from mythos.adapters.input.gtk.view_models import GameViewModel, LibraryViewModel  # noqa: E402
 from mythos.adapters.input.gtk.widgets.game_card import GameCard  # noqa: E402
 from mythos.domain.events import LibraryRefreshCompleted, LibraryRefreshStarted  # noqa: E402
@@ -160,14 +164,29 @@ class LibraryView(Gtk.Box):
         for vm in visible:
             card = GameCard(
                 vm=vm,
-                on_detail=self._on_game_detail,
-                on_install=self._on_game_install,
-                on_launch=self._on_game_launch,
+                callbacks={
+                    "on_settings": self._on_game_settings,
+                    "on_edit": self._on_game_edit,
+                    "on_install": self._on_game_install,
+                    "on_launch": self._on_game_launch,
+                    "on_update": self._on_game_install,
+                    "on_uninstall": self._on_game_uninstall,
+                    "on_verify": self._on_game_verify,
+                    "on_open_folder": self._on_game_open_folder,
+                },
             )
             self._flow.append(card)
 
-    def _on_game_detail(self, vm: GameViewModel) -> None:
-        self._window.show_game_detail(vm)
+    def _on_game_settings(self, vm: GameViewModel) -> None:
+        dialog = GameSettingsDialog(vm)
+        dialog.present(self._window)
+
+    def _on_game_edit(self, vm: GameViewModel) -> None:
+        on_save = lambda title, cover: logger.info(
+            "Edit %s: title=%s, cover=%s", vm.app_name, title, cover
+        )
+        dialog = EditGameDialog(vm, on_save=on_save)
+        dialog.present(self._window)
 
     def _on_game_install(self, vm: GameViewModel) -> None:
         def _work() -> None:
@@ -187,6 +206,31 @@ class LibraryView(Gtk.Box):
                 logger.error("Launch failed for %s: %s", vm.app_name, exc)
 
         threading.Thread(target=_work, daemon=True).start()
+
+    def _on_game_uninstall(self, vm: GameViewModel) -> None:
+        def _work() -> None:
+            try:
+                self._c.uninstall_game_use_case.execute(AppName(vm.app_name))
+                GLib.idle_add(self._refresh_library)
+            except Exception as exc:
+                logger.error("Uninstall failed for %s: %s", vm.app_name, exc)
+
+        threading.Thread(target=_work, daemon=True).start()
+
+    def _on_game_verify(self, vm: GameViewModel) -> None:
+        def _work() -> None:
+            try:
+                self._c.repair_game_use_case.execute(AppName(vm.app_name))
+                GLib.idle_add(self._refresh_library)
+            except Exception as exc:
+                logger.error("Verify failed for %s: %s", vm.app_name, exc)
+
+        threading.Thread(target=_work, daemon=True).start()
+
+    def _on_game_open_folder(self, vm: GameViewModel) -> None:
+        if vm.install_path:
+            from gi.repository import Gdk
+            Gtk.show_uri(None, f"file://{vm.install_path}", Gdk.CURRENT_TIME)
 
     def _refresh_library(self) -> None:
         def _work() -> None:

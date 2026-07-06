@@ -1,30 +1,17 @@
-# Mythos — Epic Games Launcher
-# Copyright (C) 2024 Luis Alcaras <luisalcarasr@gmail.com>
-# SPDX-License-Identifier: GPL-3.0-or-later
-"""
-GameCard — a clickable tile in the library grid.
-
-Layout (top→bottom):
-  1. Image area — CONTAIN (full image visible) on dark bg
-  2. Footer — title, status, action button + settings icon
-
-Card aspect ratio is 9:16 (vertical), computed from _CARD_WIDTH.
-"""
-
 from __future__ import annotations
 
 import logging
-from typing import Callable
 
 import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 
-from gi.repository import Adw, GLib, Gtk  # noqa: E402
+from gi.repository import Gtk
 
-from mythos.adapters.input.gtk.view_models import GameViewModel  # noqa: E402
-from mythos.domain.value_objects import GameStatus  # noqa: E402
+from mythos.adapters.input.gtk.dialogs.game_context_menu import GameContextMenu
+from mythos.adapters.input.gtk.view_models import GameViewModel
+from mythos.domain.value_objects import GameStatus
 
 logger = logging.getLogger(__name__)
 
@@ -36,39 +23,26 @@ _IMAGE_HEIGHT = _CARD_HEIGHT - _FOOTER_HEIGHT
 
 class GameCard(Gtk.FlowBoxChild):
     """
-    A fixed-width card at 9:16 vertical ratio (height = width × 16/9).
+    A fixed-width card at 9:16 vertical ratio (height = width x 16/9).
 
-    ┌─────────────────┬──┐
-    │                 │⚙ │  Image area (COVER) + settings top-right
-    │                 │  │
-    │                 │  │
-    ├────────────────────┤
-    │ Title              │  Footer
-    │ [Install]          │
-    └────────────────────┘
+    Layout:
+      - Image area (COVER) + settings button (top-right overlay, hover)
+      - Footer: title + action button
+
+    Right-click or click on the settings button opens a context menu
+    with actions contextual to the game state.
     """
 
-    def __init__(
-        self,
-        vm: GameViewModel,
-        on_detail: Callable[[GameViewModel], None],
-        on_install: Callable[[GameViewModel], None],
-        on_launch: Callable[[GameViewModel], None],
-    ) -> None:
+    def __init__(self, vm: GameViewModel, callbacks: dict[str, callable]) -> None:
         super().__init__()
         self._vm = vm
-        self._on_detail = on_detail
-        self._on_install = on_install
-        self._on_launch = on_launch
+        self._callbacks = callbacks
+        self._ctx_menu = GameContextMenu(vm, callbacks)
 
         self.set_size_request(_CARD_WIDTH, _CARD_HEIGHT)
         self.set_hexpand(False)
         self.set_vexpand(False)
         self._build()
-
-    # ---------------------------------------------------------------- #
-    # UI construction                                                    #
-    # ---------------------------------------------------------------- #
 
     def _build(self) -> None:
         outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
@@ -85,27 +59,28 @@ class GameCard(Gtk.FlowBoxChild):
         self._cover.set_content_fit(Gtk.ContentFit.COVER)
         self._cover.add_css_class("card-cover")
 
-        img_click = Gtk.GestureClick()
-        img_click.connect("released", lambda *_: self._on_detail(self._vm))
-        self._cover.add_controller(img_click)
-
         img_overlay.set_child(self._cover)
 
         settings_btn = Gtk.Button(icon_name="emblem-system-symbolic")
         settings_btn.add_css_class("flat")
-        settings_btn.add_css_class("circular")
         settings_btn.add_css_class("card-settings")
-        settings_btn.set_tooltip_text("Game details")
+        settings_btn.set_tooltip_text("Game options")
         settings_btn.set_halign(Gtk.Align.END)
         settings_btn.set_valign(Gtk.Align.START)
         settings_btn.set_margin_top(6)
         settings_btn.set_margin_end(6)
-        settings_btn.connect("clicked", lambda *_: self._on_detail(self._vm))
+        settings_btn.connect("clicked", lambda *_: self._ctx_menu.show_at(settings_btn))
         img_overlay.add_overlay(settings_btn)
 
         motion = Gtk.EventControllerMotion()
-        motion.connect("enter", lambda *_: settings_btn.add_css_class("card-settings-visible"))
-        motion.connect("leave", lambda *_: settings_btn.remove_css_class("card-settings-visible"))
+        motion.connect(
+            "enter",
+            lambda *_: settings_btn.add_css_class("card-settings-visible"),
+        )
+        motion.connect(
+            "leave",
+            lambda *_: settings_btn.remove_css_class("card-settings-visible"),
+        )
         outer.add_controller(motion)
 
         outer.append(img_overlay)
@@ -133,23 +108,22 @@ class GameCard(Gtk.FlowBoxChild):
         outer.append(footer)
 
         self._load_cover()
+
+        self._setup_right_click(outer)
+
         self.set_child(outer)
 
-    # ---------------------------------------------------------------- #
-    # Cover image                                                        #
-    # ---------------------------------------------------------------- #
+    def _setup_right_click(self, widget: Gtk.Widget) -> None:
+        right_click = Gtk.GestureClick(button=3)
+        right_click.connect("pressed", lambda *_: self._ctx_menu.show_at(widget))
+        widget.add_controller(right_click)
 
     def _load_cover(self) -> None:
         if self._vm.cover_path and self._vm.cover_path.exists():
             try:
                 self._cover.set_filename(str(self._vm.cover_path))
-                return
             except Exception as exc:
                 logger.debug("Could not load cover %s: %s", self._vm.cover_path, exc)
-
-    # ---------------------------------------------------------------- #
-    # Action button                                                      #
-    # ---------------------------------------------------------------- #
 
     def _update_action_button(self) -> None:
         if self._vm.status == GameStatus.NOT_INSTALLED:
@@ -181,11 +155,11 @@ class GameCard(Gtk.FlowBoxChild):
     def _on_action_clicked(self, _btn: Gtk.Button) -> None:
         status = self._vm.status
         if status == GameStatus.NOT_INSTALLED:
-            self._on_install(self._vm)
+            self._callbacks.get("on_install", lambda _: None)(self._vm)
         elif status == GameStatus.INSTALLED:
             if self._vm.needs_update:
-                self._on_install(self._vm)
+                self._callbacks.get("on_install", lambda _: None)(self._vm)
             else:
-                self._on_launch(self._vm)
+                self._callbacks.get("on_launch", lambda _: None)(self._vm)
         elif status == GameStatus.ERROR:
-            self._on_install(self._vm)
+            self._callbacks.get("on_install", lambda _: None)(self._vm)

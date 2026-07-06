@@ -1,0 +1,67 @@
+/* Mythos — Epic Games Launcher
+ * Copyright (C) 2024 Luis Alcaras <luisalcarasr@gmail.com>
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ *
+ * Custom CSS applied on top of libadwaita's default theme.
+ */
+
+/* ------------------------------------------------------------------ */
+/* Game card                                                            */
+/* ------------------------------------------------------------------ */
+
+.card-cover {
+    border-radius: 12px;
+}
+
+.card-bottom {
+    background: linear-gradient(transparent, rgba(0, 0, 0, 0.75));
+    border-radius: 0 0 12px 12px;
+    padding: 8px;
+}
+
+.card-title {
+    color: white;
+    font-weight: 600;
+    font-size: 0.85rem;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+}
+
+/* ------------------------------------------------------------------ */
+/* Status pills                                                         */
+/* ------------------------------------------------------------------ */
+
+.status-pill {
+    font-size: 0.75rem;
+    font-weight: 600;
+    border-radius: 4px;
+    padding: 1px 5px;
+}
+
+.status-installed {
+    color: #57e389;
+}
+
+.status-running {
+    color: #62a0ea;
+}
+
+.status-installing,
+.status-queued {
+    color: #f9f06b;
+}
+
+.status-error {
+    color: #ff7800;
+}
+
+.status-not-installed {
+    color: rgba(255, 255, 255, 0.55);
+}
+
+/* ------------------------------------------------------------------ */
+/* Misc                                                                 */
+/* ------------------------------------------------------------------ */
+
+window {
+    background-color: @window_bg_color;
+}

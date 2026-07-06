@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.mythos.Launcher</id>
+  <name>Mythos</name>
+  <summary>Epic Games launcher</summary>
+  <description>
+    <p>
+      Mythos is a free, open-source launcher for the Epic Games Store.
+      Built with Python and GTK4, it follows a strict hexagonal architecture
+      keeping the business logic clean and decoupled from the UI.
+    </p>
+    <p>Features:</p>
+    <ul>
+      <li>Browse and search your full Epic Games library</li>
+      <li>Install, update, repair, move, and uninstall games</li>
+      <li>Launch games natively or via Wine / Proton on Linux</li>
+      <li>Download queue with real-time progress</li>
+      <li>Cloud save synchronisation</li>
+      <li>Wine / Proton runtime manager</li>
+      <li>Per-game launch options and environment variables</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">com.mythos.Launcher.desktop</launchable>
+  <url type="homepage">https://github.com/luisalcarasr/Mythos</url>
+  <url type="bugtracker">https://github.com/luisalcarasr/Mythos/issues</url>
+  <developer id="com.mythos">
+    <name>Luis Alcaras</name>
+  </developer>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <releases>
+    <release version="0.1.0" date="2024-07-01">
+      <description>
+        <p>Initial release — Epic Games library, install, launch, cloud saves.</p>
+      </description>
+    </release>
+  </releases>
+  <content_rating type="oars-1.1"/>
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+  </supports>
+  <requires>
+    <display_length compare="ge">800</display_length>
+  </requires>
+</component>

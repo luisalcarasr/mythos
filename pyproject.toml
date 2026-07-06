@@ -1,0 +1,57 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "mythos"
+version = "0.1.0"
+description = "Mythos — Epic Games launcher built with Python and GTK4"
+readme = "README.md"
+license = { file = "COPYING" }
+authors = [
+    { name = "Luis Alcaras", email = "luisalcarasr@gmail.com" }
+]
+keywords = ["epic-games", "launcher", "gtk4", "gaming"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: X11 Applications :: GTK",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Games/Entertainment",
+]
+requires-python = ">=3.11"
+
+# Runtime deps — PyGObject is installed via the system package manager
+# (pygobject3 / python3-gi) because it requires GTK4 native libs.
+# legendary-gl is the Epic Games CLI/library we use as driven adapter.
+dependencies = [
+    "legendary-gl>=0.20.34",
+    "platformdirs>=4.2.0",
+    "requests>=2.32.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.2",
+    "pytest-cov>=5.0",
+]
+
+[project.scripts]
+mythos = "mythos.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["mythos*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+
+[tool.coverage.run]
+source = ["mythos"]
+omit = ["mythos/adapters/input/gtk/*"]  # GTK code untestable headless

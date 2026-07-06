@@ -1,0 +1,14 @@
+[Desktop Entry]
+Name=Mythos
+Name[es]=Mythos
+Comment=Epic Games launcher
+Comment[es]=Lanzador de Epic Games
+Exec=mythos %u
+Icon=com.mythos.Launcher
+Terminal=false
+Type=Application
+Categories=Game;
+MimeType=x-scheme-handler/mythos;
+Keywords=epic;games;launcher;
+StartupNotify=true
+StartupWMClass=Mythos

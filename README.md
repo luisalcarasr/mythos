@@ -11,6 +11,12 @@ tested without any system libraries installed.
 
 ---
 
+## Screenshots
+
+![Mythos screenshot](https://raw.githubusercontent.com/luisalcarasr/mythos/refs/heads/assets/images/screenshot.png)
+
+---
+
 ## Features
 
 - Login with your Epic Games account (OAuth via embedded WebView)

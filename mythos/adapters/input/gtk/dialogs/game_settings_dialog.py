@@ -20,7 +20,7 @@ class GameSettingsDialog(Adw.PreferencesDialog):
 
     Tabs:
       - Game (default): cover image, game info, installation details, actions
-      - Launch Options: launch parameters, offline mode
+      - Runner: launch parameters, offline mode
       - About: long description (only when present)
     """
 
@@ -47,8 +47,8 @@ class GameSettingsDialog(Adw.PreferencesDialog):
     # -- Pages -------------------------------------------------------- #
 
     def _build_launch_options(self) -> None:
-        page = Adw.PreferencesPage(title="Launch Options")
-        group = Adw.PreferencesGroup(title="Launch Options")
+        page = Adw.PreferencesPage(title="Runner")
+        group = Adw.PreferencesGroup(title="Runner")
 
         self._launch_params_row = Adw.EntryRow(title="Launch Parameters")
         self._launch_params_row.set_text(self._vm.launch_parameters or "")

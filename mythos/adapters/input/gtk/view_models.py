@@ -117,28 +117,53 @@ class GameViewModel:
 
 @dataclass
 class DownloadTaskViewModel:
-    """Presentation state for a row in the download queue view."""
+    """Presentation state for a single download card."""
     task_id: str
     app_name: str
     title: str
-    kind: str
+    kind: str                        # "install" | "update" | "repair" | "runner"
     percent: int
+    fraction: float
     speed_human: str
+    downloaded_human: str
+    total_human: str
+    eta_human: str
     status: GameStatus
     error_message: str
+    is_paused: bool = False
+    is_runner: bool = False
+    thumbnail_path: Optional[Path] = None
 
     @staticmethod
     def from_task(task: DownloadTask) -> "DownloadTaskViewModel":
+        p = task.progress
         return DownloadTaskViewModel(
             task_id=task.id,
             app_name=str(task.app_name),
-            title=task.title,
+            title=task.title or str(task.app_name),
             kind=task.kind,
-            percent=task.progress.percent,
-            speed_human=task.progress.speed_human(),
+            percent=p.percent,
+            fraction=p.fraction,
+            speed_human=p.speed_human(),
+            downloaded_human=p.downloaded_human,
+            total_human=p.total_human,
+            eta_human=p.eta_human,
             status=task.status,
             error_message=task.error_message,
         )
+
+    def stats_line(self) -> str:
+        """Single-line stats: 'X GB / Y GB · Z MB/s · 3m left'."""
+        if self.error_message:
+            return self.error_message[:80]
+        if self.fraction >= 1.0:
+            return f"{self.total_human} — Complete"
+        parts = [f"{self.downloaded_human} / {self.total_human}"]
+        if self.speed_human and self.speed_human != "0.0 B/s":
+            parts.append(self.speed_human)
+        if self.eta_human and self.eta_human != "—":
+            parts.append(self.eta_human)
+        return "  ·  ".join(parts)
 
 
 @dataclass

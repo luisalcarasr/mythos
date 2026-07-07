@@ -22,6 +22,7 @@ class FakeDownloadQueue(DownloadQueuePort):
 
     def __init__(self, initial: Optional[list[DownloadTask]] = None) -> None:
         self._tasks: list[DownloadTask] = list(initial or [])
+        self._paused: set[str] = set()
 
     def enqueue(self, task: DownloadTask) -> None:
         self._tasks.append(task)
@@ -34,3 +35,12 @@ class FakeDownloadQueue(DownloadQueuePort):
 
     def get_active(self) -> Optional[DownloadTask]:
         return self._tasks[0] if self._tasks else None
+
+    def pause(self, task_id: str) -> None:
+        self._paused.add(task_id)
+
+    def resume(self, task_id: str) -> None:
+        self._paused.discard(task_id)
+
+    def is_paused(self, task_id: str) -> bool:
+        return task_id in self._paused

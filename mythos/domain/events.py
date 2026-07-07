@@ -99,6 +99,8 @@ class DownloadEnqueued(DomainEvent):
     task_id: str = ""
     app_name: str = ""
     kind: str = "install"   # "install" | "update" | "repair"
+    title: str = ""
+    total_bytes: int = 0
 
 
 @dataclass(frozen=True)
@@ -116,6 +118,18 @@ class DownloadProgressed(DomainEvent):
 
 @dataclass(frozen=True)
 class DownloadCompleted(DomainEvent):
+    task_id: str = ""
+    app_name: str = ""
+
+
+@dataclass(frozen=True)
+class DownloadPaused(DomainEvent):
+    task_id: str = ""
+    app_name: str = ""
+
+
+@dataclass(frozen=True)
+class DownloadResumed(DomainEvent):
     task_id: str = ""
     app_name: str = ""
 
@@ -141,6 +155,7 @@ class DownloadFailed(DomainEvent):
 @dataclass(frozen=True)
 class RunnerInstallStarted(DomainEvent):
     runner_name: str = ""
+    total_bytes: int = 0
 
 
 @dataclass(frozen=True)

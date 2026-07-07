@@ -2,118 +2,145 @@
 # Copyright (C) 2024 Luis Alcaras <luisalcarasr@gmail.com>
 # SPDX-License-Identifier: GPL-3.0-or-later
 """
-DownloadsView — real-time download queue.
+DownloadsView — vertical stack of DownloadCards.
 
-Subscribes to domain events (DownloadProgressed, DownloadCompleted,
-DownloadFailed, DownloadEnqueued) via the EventBus and updates rows
-on the GLib main loop.
+Each active download (game install/update/repair or Proton runner
+install) gets its own DownloadCard with thumbnail, title, progress
+bar, pause/play button, cancel button, and a stats line.
+
+The view:
+  - Pre-populates from ``download_queue_port.list_tasks()`` on build.
+  - Subscribes to domain events to add / update / remove cards live.
 """
 
 from __future__ import annotations
 
 import logging
+from pathlib import Path
+from typing import Optional
 
 import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 
-from gi.repository import Adw, GLib, Gtk  # noqa: E402
+from gi.repository import Adw, Gtk  # noqa: E402
 
+from mythos.adapters.input.gtk.view_models import DownloadTaskViewModel  # noqa: E402
+from mythos.adapters.input.gtk.widgets.download_card import DownloadCard  # noqa: E402
 from mythos.config.container import Container  # noqa: E402
+from mythos.domain.entities import DownloadTask  # noqa: E402
 from mythos.domain.events import (  # noqa: E402
     DownloadCancelled,
     DownloadCompleted,
     DownloadEnqueued,
     DownloadFailed,
+    DownloadPaused,
     DownloadProgressed,
+    DownloadResumed,
     RunnerInstallCompleted,
     RunnerInstallFailed,
     RunnerInstallProgressed,
     RunnerInstallStarted,
 )
+from mythos.domain.value_objects import AppName, GameStatus, Progress  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
+# Sentinel task_id prefix used for runner install cards
+_RUNNER_PREFIX = "__runner__"
 
-class _DownloadRow(Adw.ActionRow):
-    """A single row representing a queued or active download."""
 
-    def __init__(self, task_id: str, app_name: str, kind: str) -> None:
-        super().__init__()
-        self.task_id = task_id
-        self.set_title(app_name)
-        self.set_subtitle(kind.capitalize())
+def _runner_task_id(runner_name: str) -> str:
+    return f"{_RUNNER_PREFIX}{runner_name}"
 
-        self._progress = Gtk.ProgressBar()
-        self._progress.set_valign(Gtk.Align.CENTER)
-        self._progress.set_hexpand(True)
-        self._progress.set_show_text(True)
-        self.add_suffix(self._progress)
 
-        self._status = Gtk.Label()
-        self._status.add_css_class("dim-label")
-        self.add_suffix(self._status)
+def _vm_from_task(task: DownloadTask, image_cache=None) -> DownloadTaskViewModel:
+    vm = DownloadTaskViewModel.from_task(task)
+    if image_cache:
+        try:
+            vm.thumbnail_path = image_cache.get(task.app_name)
+        except Exception:
+            pass
+    return vm
 
-    def update_progress(self, fraction: float, speed: str) -> None:
-        self._progress.set_fraction(fraction)
-        self._progress.set_text(f"{int(fraction * 100)}%  {speed}")
 
-    def mark_done(self) -> None:
-        self._progress.set_fraction(1.0)
-        self._progress.set_text("Complete")
-        self._status.set_text("✓")
-
-    def mark_failed(self, reason: str) -> None:
-        self._progress.set_text("Failed")
-        self._status.set_markup(f'<span color="red">✗</span>')
-        self.set_subtitle(reason[:60])
+def _runner_vm(
+    runner_name: str,
+    total_bytes: int = 0,
+    fraction: float = 0.0,
+    progress: Optional[Progress] = None,
+) -> DownloadTaskViewModel:
+    p = progress or Progress(
+        fraction=fraction,
+        total_bytes=total_bytes,
+    )
+    return DownloadTaskViewModel(
+        task_id=_runner_task_id(runner_name),
+        app_name=runner_name,
+        title=runner_name,
+        kind="Runner",
+        percent=p.percent,
+        fraction=p.fraction,
+        speed_human=p.speed_human(),
+        downloaded_human=p.downloaded_human,
+        total_human=p.total_human,
+        eta_human=p.eta_human,
+        status=GameStatus.INSTALLING,
+        error_message="",
+        is_runner=True,
+    )
 
 
 class DownloadsView(Gtk.Box):
     def __init__(self, container: Container) -> None:
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         self._c = container
-        self._rows: dict[str, _DownloadRow] = {}
+        self._cards: dict[str, DownloadCard] = {}
 
         self._build_ui()
         self._subscribe_events()
+        self._prepopulate()
+
+    # ---------------------------------------------------------------- #
+    # UI construction                                                    #
+    # ---------------------------------------------------------------- #
 
     def _build_ui(self) -> None:
-        # Header
-        label = Gtk.Label(label="Download Queue")
-        label.add_css_class("title-2")
-        label.set_margin_top(16)
-        label.set_margin_start(16)
-        label.set_xalign(0)
-        self.append(label)
-
-        self.append(Gtk.Separator())
-
         scrolled = Gtk.ScrolledWindow()
         scrolled.set_vexpand(True)
+        scrolled.set_hexpand(True)
         self.append(scrolled)
 
-        self._list = Gtk.ListBox()
-        self._list.set_selection_mode(Gtk.SelectionMode.NONE)
-        self._list.add_css_class("boxed-list")
-        self._list.set_margin_top(12)
-        self._list.set_margin_bottom(12)
-        self._list.set_margin_start(12)
-        self._list.set_margin_end(12)
-        scrolled.set_child(self._list)
+        # Clamp content to a reasonable max-width
+        clamp = Adw.Clamp()
+        clamp.set_maximum_size(720)
+        clamp.set_margin_top(16)
+        clamp.set_margin_bottom(16)
+        scrolled.set_child(clamp)
+
+        self._stack = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        self._stack.set_margin_start(16)
+        self._stack.set_margin_end(16)
+        clamp.set_child(self._stack)
 
         self._empty = Adw.StatusPage()
         self._empty.set_icon_name("folder-download-symbolic")
         self._empty.set_title("No active downloads")
-        self._empty.set_description("Install a game from the Library to start downloading.")
+        self._empty.set_description(
+            "Install a game from the Library to start downloading."
+        )
         self._empty.set_vexpand(True)
         self.append(self._empty)
+
+        self._update_empty_state()
 
     def _subscribe_events(self) -> None:
         bus = self._c.event_bus
         bus.subscribe(DownloadEnqueued, self._on_enqueued)
         bus.subscribe(DownloadProgressed, self._on_progress)
+        bus.subscribe(DownloadPaused, self._on_paused)
+        bus.subscribe(DownloadResumed, self._on_resumed)
         bus.subscribe(DownloadCompleted, self._on_completed)
         bus.subscribe(DownloadFailed, self._on_failed)
         bus.subscribe(DownloadCancelled, self._on_cancelled)
@@ -122,62 +149,174 @@ class DownloadsView(Gtk.Box):
         bus.subscribe(RunnerInstallCompleted, self._on_runner_completed)
         bus.subscribe(RunnerInstallFailed, self._on_runner_failed)
 
+    def _prepopulate(self) -> None:
+        """Show tasks already in the queue when the view is first created."""
+        try:
+            queue = self._c.download_queue_port
+            if queue is None:
+                return
+            for task in queue.list_tasks():
+                vm = _vm_from_task(task, self._c.image_cache_port)
+                self._add_card(vm)
+        except Exception as exc:
+            logger.warning("Could not pre-populate downloads: %s", exc)
+
     # ---------------------------------------------------------------- #
-    # Event handlers (run on GLib main loop via GLibEventBus)           #
+    # Card management                                                    #
     # ---------------------------------------------------------------- #
 
-    def _on_enqueued(self, event: DownloadEnqueued) -> None:  # type: ignore[name-defined]
-        row = _DownloadRow(event.task_id, event.app_name, event.kind)
-        self._rows[event.task_id] = row
-        self._list.append(row)
-        self._empty.set_visible(False)
-        self._list.set_visible(True)
+    def _add_card(self, vm: DownloadTaskViewModel) -> DownloadCard:
+        card = DownloadCard(
+            vm=vm,
+            on_pause=self._handle_pause,
+            on_cancel=self._handle_cancel,
+        )
+        self._cards[vm.task_id] = card
+        self._stack.append(card)
+        self._update_empty_state()
+        return card
 
-    def _on_progress(self, event: DownloadProgressed) -> None:  # type: ignore[name-defined]
-        row = self._rows.get(event.task_id)
-        if row and event.progress:
-            row.update_progress(event.progress.fraction, event.progress.speed_human())
+    def _update_empty_state(self) -> None:
+        has_cards = bool(self._cards)
+        self._stack.set_visible(has_cards)
+        self._empty.set_visible(not has_cards)
 
-    def _on_completed(self, event: DownloadCompleted) -> None:  # type: ignore[name-defined]
-        row = self._rows.get(event.task_id)
-        if row:
-            row.mark_done()
+    # ---------------------------------------------------------------- #
+    # Pause / cancel callbacks (from card buttons)                       #
+    # ---------------------------------------------------------------- #
 
-    def _on_failed(self, event: DownloadFailed) -> None:  # type: ignore[name-defined]
-        row = self._rows.get(event.task_id)
-        if row:
-            row.mark_failed(event.reason)
+    def _handle_pause(self, task_id: str) -> None:
+        card = self._cards.get(task_id)
+        if card is None:
+            return
+        # Toggle between pause and resume
+        if card._paused:
+            try:
+                self._c.resume_download_use_case.execute(task_id)
+            except Exception as exc:
+                logger.error("Resume failed: %s", exc)
+        else:
+            try:
+                self._c.pause_download_use_case.execute(task_id)
+            except Exception as exc:
+                logger.error("Pause failed: %s", exc)
 
-    def _on_cancelled(self, event: DownloadCancelled) -> None:  # type: ignore[name-defined]
-        row = self._rows.pop(event.task_id, None)
-        if row:
-            self._list.remove(row)
-        if not self._rows:
-            self._empty.set_visible(True)
-            self._list.set_visible(False)
+    def _handle_cancel(self, task_id: str) -> None:
+        try:
+            self._c.cancel_download_use_case.execute(task_id)
+        except Exception as exc:
+            logger.error("Cancel failed: %s", exc)
+            # Remove the card immediately so the UI is responsive
+            self._remove_card(task_id)
+
+    def _remove_card(self, task_id: str) -> None:
+        card = self._cards.pop(task_id, None)
+        if card:
+            self._stack.remove(card)
+        self._update_empty_state()
+
+    # ---------------------------------------------------------------- #
+    # Game download event handlers                                       #
+    # ---------------------------------------------------------------- #
+
+    def _on_enqueued(self, event: DownloadEnqueued) -> None:
+        image_cache = self._c.image_cache_port
+        thumbnail: Optional[Path] = None
+        if image_cache:
+            try:
+                thumbnail = image_cache.get(AppName(event.app_name))
+            except Exception:
+                pass
+
+        from mythos.domain.value_objects import Progress
+        p = Progress(total_bytes=event.total_bytes)
+        vm = DownloadTaskViewModel(
+            task_id=event.task_id,
+            app_name=event.app_name,
+            title=event.title or event.app_name,
+            kind=event.kind,
+            percent=0,
+            fraction=0.0,
+            speed_human="",
+            downloaded_human=p.downloaded_human,
+            total_human=p.total_human,
+            eta_human="—",
+            status=GameStatus.QUEUED,
+            error_message="",
+            thumbnail_path=thumbnail,
+        )
+        self._add_card(vm)
+
+    def _on_progress(self, event: DownloadProgressed) -> None:
+        card = self._cards.get(event.task_id)
+        if card and event.progress:
+            p = event.progress
+            vm = DownloadTaskViewModel(
+                task_id=event.task_id,
+                app_name=event.app_name,
+                title=card._vm.title,
+                kind=card._vm.kind,
+                percent=p.percent,
+                fraction=p.fraction,
+                speed_human=p.speed_human(),
+                downloaded_human=p.downloaded_human,
+                total_human=p.total_human,
+                eta_human=p.eta_human,
+                status=GameStatus.INSTALLING,
+                error_message="",
+                is_runner=card._vm.is_runner,
+                thumbnail_path=card._vm.thumbnail_path,
+            )
+            card.update_progress(vm)
+
+    def _on_paused(self, event: DownloadPaused) -> None:
+        card = self._cards.get(event.task_id)
+        if card:
+            card.set_paused(True)
+
+    def _on_resumed(self, event: DownloadResumed) -> None:
+        card = self._cards.get(event.task_id)
+        if card:
+            card.set_paused(False)
+
+    def _on_completed(self, event: DownloadCompleted) -> None:
+        card = self._cards.get(event.task_id)
+        if card:
+            card.mark_done()
+
+    def _on_failed(self, event: DownloadFailed) -> None:
+        card = self._cards.get(event.task_id)
+        if card:
+            card.mark_failed(event.reason)
+
+    def _on_cancelled(self, event: DownloadCancelled) -> None:
+        self._remove_card(event.task_id)
 
     # ---------------------------------------------------------------- #
     # Runner install event handlers                                      #
     # ---------------------------------------------------------------- #
 
     def _on_runner_started(self, event: RunnerInstallStarted) -> None:
-        row = _DownloadRow(event.runner_name, event.runner_name, "Runner")
-        self._rows[event.runner_name] = row
-        self._list.append(row)
-        self._empty.set_visible(False)
-        self._list.set_visible(True)
+        vm = _runner_vm(event.runner_name, total_bytes=event.total_bytes)
+        self._add_card(vm)
 
     def _on_runner_progress(self, event: RunnerInstallProgressed) -> None:
-        row = self._rows.get(event.runner_name)
-        if row and event.progress:
-            row.update_progress(event.progress.fraction, event.progress.speed_human())
+        task_id = _runner_task_id(event.runner_name)
+        card = self._cards.get(task_id)
+        if card and event.progress:
+            vm = _runner_vm(
+                event.runner_name,
+                total_bytes=event.progress.total_bytes,
+                progress=event.progress,
+            )
+            card.update_progress(vm)
 
     def _on_runner_completed(self, event: RunnerInstallCompleted) -> None:
-        row = self._rows.get(event.runner_name)
-        if row:
-            row.mark_done()
+        card = self._cards.get(_runner_task_id(event.runner_name))
+        if card:
+            card.mark_done()
 
     def _on_runner_failed(self, event: RunnerInstallFailed) -> None:
-        row = self._rows.get(event.runner_name)
-        if row:
-            row.mark_failed(event.reason)
+        card = self._cards.get(_runner_task_id(event.runner_name))
+        if card:
+            card.mark_failed(event.reason)

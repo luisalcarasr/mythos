@@ -105,6 +105,14 @@ class EpicStorePort(ABC):
         """Abort an in-progress install or update."""
 
     @abstractmethod
+    def pause_download(self, app_name: AppName) -> None:
+        """Pause an in-progress install or update."""
+
+    @abstractmethod
+    def resume_download(self, app_name: AppName) -> None:
+        """Resume a paused install or update."""
+
+    @abstractmethod
     def get_installed(self) -> list[InstalledInfo]:
         """Return metadata for every locally installed game."""
 
@@ -340,6 +348,14 @@ class DownloadQueuePort(ABC):
     @abstractmethod
     def get_active(self) -> Optional[DownloadTask]:
         """Return the currently-running task, or ``None``."""
+
+    @abstractmethod
+    def pause(self, task_id: str) -> None:
+        """Pause the task identified by *task_id*."""
+
+    @abstractmethod
+    def resume(self, task_id: str) -> None:
+        """Resume a paused task identified by *task_id*."""
 
 
 # ------------------------------------------------------------------ #

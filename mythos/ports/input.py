@@ -174,6 +174,18 @@ class CancelDownloadUseCase(ABC):
         """Abort the task identified by *task_id* and remove it from the queue."""
 
 
+class PauseDownloadUseCase(ABC):
+    @abstractmethod
+    def execute(self, task_id: str) -> None:
+        """Pause the task identified by *task_id*. Publishes ``DownloadPaused``."""
+
+
+class ResumeDownloadUseCase(ABC):
+    @abstractmethod
+    def execute(self, task_id: str) -> None:
+        """Resume a paused task. Publishes ``DownloadResumed``."""
+
+
 # ------------------------------------------------------------------ #
 # Cloud saves                                                          #
 # ------------------------------------------------------------------ #

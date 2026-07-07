@@ -65,6 +65,8 @@ class Container:
     sync_saves_use_case: object = field(default=None, repr=False)
     get_settings_use_case: object = field(default=None, repr=False)
     update_settings_use_case: object = field(default=None, repr=False)
+    pause_download_use_case: object = field(default=None, repr=False)
+    resume_download_use_case: object = field(default=None, repr=False)
     list_proton_versions_use_case: object = field(default=None, repr=False)
     install_proton_use_case: object = field(default=None, repr=False)
     set_game_proton_use_case: object = field(default=None, repr=False)
@@ -99,7 +101,7 @@ def build() -> Container:
         UninstallGame,
     )
     from mythos.application.launch import LaunchGame
-    from mythos.application.downloads import EnqueueDownload, CancelDownload
+    from mythos.application.downloads import EnqueueDownload, CancelDownload, PauseDownload, ResumeDownload
     from mythos.application.saves import SyncSaves
     from mythos.application.settings import GetSettings, UpdateSettings
     from mythos.application.runners import ListProtonVersions, InstallProton, SetGameProton
@@ -165,6 +167,8 @@ def build() -> Container:
         event_bus=event_bus,
     )
     cancel_uc = CancelDownload(epic_store=epic_store, event_bus=event_bus)
+    pause_uc = PauseDownload(queue=download_queue_port, event_bus=event_bus)
+    resume_uc = ResumeDownload(queue=download_queue_port, event_bus=event_bus)
 
     sync_saves_uc = SyncSaves(
         cloud_save_port=cloud_save_port,
@@ -206,6 +210,8 @@ def build() -> Container:
         launch_game_use_case=launch_uc,
         enqueue_download_use_case=enqueue_uc,
         cancel_download_use_case=cancel_uc,
+        pause_download_use_case=pause_uc,
+        resume_download_use_case=resume_uc,
         sync_saves_use_case=sync_saves_uc,
         get_settings_use_case=get_settings_uc,
         update_settings_use_case=update_settings_uc,

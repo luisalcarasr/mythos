@@ -11,10 +11,10 @@ from pathlib import Path
 from typing import Optional
 
 from mythos.domain.entities import DownloadTask
-from mythos.domain.events import DownloadCancelled, DownloadEnqueued
+from mythos.domain.events import DownloadCancelled, DownloadEnqueued, DownloadPaused, DownloadResumed
 from mythos.domain.value_objects import AppName, GameStatus, Platform
-from mythos.ports.input import CancelDownloadUseCase, EnqueueDownloadUseCase
-from mythos.ports.output import EpicStorePort, EventBus
+from mythos.ports.input import CancelDownloadUseCase, EnqueueDownloadUseCase, PauseDownloadUseCase, ResumeDownloadUseCase
+from mythos.ports.output import DownloadQueuePort, EpicStorePort, EventBus
 from mythos.application.install import InstallGame, UpdateGame
 
 logger = logging.getLogger(__name__)
@@ -74,8 +74,39 @@ class CancelDownload(CancelDownloadUseCase):
 
     def execute(self, task_id: str) -> None:
         logger.info("Cancelling download task %s", task_id)
-        # The app_name is embedded in the task; in a real impl we'd
-        # look it up from an in-memory queue registry.
-        # Legendary is notified via the store adapter.
         if self._bus:
             self._bus.publish(DownloadCancelled(task_id=task_id, app_name=""))
+
+
+class PauseDownload(PauseDownloadUseCase):
+    def __init__(
+        self,
+        queue: Optional[DownloadQueuePort] = None,
+        event_bus: Optional[EventBus] = None,
+    ) -> None:
+        self._queue = queue
+        self._bus = event_bus
+
+    def execute(self, task_id: str) -> None:
+        logger.info("Pausing download task %s", task_id)
+        if self._queue:
+            self._queue.pause(task_id)
+        if self._bus:
+            self._bus.publish(DownloadPaused(task_id=task_id, app_name=""))
+
+
+class ResumeDownload(ResumeDownloadUseCase):
+    def __init__(
+        self,
+        queue: Optional[DownloadQueuePort] = None,
+        event_bus: Optional[EventBus] = None,
+    ) -> None:
+        self._queue = queue
+        self._bus = event_bus
+
+    def execute(self, task_id: str) -> None:
+        logger.info("Resuming download task %s", task_id)
+        if self._queue:
+            self._queue.resume(task_id)
+        if self._bus:
+            self._bus.publish(DownloadResumed(task_id=task_id, app_name=""))

@@ -51,7 +51,7 @@ def build_fake() -> Container:
 
     # -- Use cases (real) ---------------------------------------------- #
     from mythos.application.auth import GetSession, Login, Logout
-    from mythos.application.downloads import CancelDownload, EnqueueDownload
+    from mythos.application.downloads import CancelDownload, EnqueueDownload, PauseDownload, ResumeDownload
     from mythos.application.install import (
         InstallGame,
         MoveGame,
@@ -138,6 +138,8 @@ def build_fake() -> Container:
         event_bus=event_bus,
     )
     cancel_uc = CancelDownload(epic_store=epic_store, event_bus=event_bus)
+    pause_uc = PauseDownload(queue=download_queue_port, event_bus=event_bus)
+    resume_uc = ResumeDownload(queue=download_queue_port, event_bus=event_bus)
 
     sync_saves_uc = SyncSaves(
         cloud_save_port=cloud_save_port,
@@ -174,6 +176,8 @@ def build_fake() -> Container:
         launch_game_use_case=launch_uc,
         enqueue_download_use_case=enqueue_uc,
         cancel_download_use_case=cancel_uc,
+        pause_download_use_case=pause_uc,
+        resume_download_use_case=resume_uc,
         sync_saves_use_case=sync_saves_uc,
         get_settings_use_case=get_settings_uc,
         update_settings_use_case=update_settings_uc,

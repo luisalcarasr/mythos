@@ -233,6 +233,17 @@ class LegendaryEpicStore(EpicStorePort):
                 app_name,
             )
 
+    def pause_download(self, app_name: AppName) -> None:
+        # legendary-gl has no native pause API; log and no-op for now.
+        logger.warning(
+            "pause_download(%s): legendary has no pause API — not implemented.", app_name
+        )
+
+    def resume_download(self, app_name: AppName) -> None:
+        logger.warning(
+            "resume_download(%s): legendary has no resume API — not implemented.", app_name
+        )
+
     # ---------------------------------------------------------------- #
     # Launch                                                             #
     # ---------------------------------------------------------------- #

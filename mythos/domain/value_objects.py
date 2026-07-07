@@ -177,6 +177,36 @@ class Progress:
             s /= 1024  # type: ignore[assignment]
         return f"{s:.1f} TiB/s"  # type: ignore[unreachable]
 
+    @staticmethod
+    def _bytes_human(b: int) -> str:
+        v: float = float(b)
+        for unit in ("B", "KiB", "MiB", "GiB", "TiB"):
+            if v < 1024:
+                return f"{v:.1f} {unit}"
+            v /= 1024
+        return f"{v:.1f} PiB"
+
+    @property
+    def downloaded_human(self) -> str:
+        return self._bytes_human(self.downloaded_bytes)
+
+    @property
+    def total_human(self) -> str:
+        return self._bytes_human(self.total_bytes)
+
+    @property
+    def eta_human(self) -> str:
+        if self.eta_seconds <= 0 or self.fraction >= 1.0:
+            return "—"
+        secs = int(self.eta_seconds)
+        h, rem = divmod(secs, 3600)
+        m, s = divmod(rem, 60)
+        if h:
+            return f"{h}h {m}m"
+        if m:
+            return f"{m}m {s}s"
+        return f"{s}s"
+
 
 @dataclass(frozen=True)
 class LaunchOptions:

@@ -27,6 +27,10 @@ from mythos.domain.events import (  # noqa: E402
     DownloadEnqueued,
     DownloadFailed,
     DownloadProgressed,
+    RunnerInstallCompleted,
+    RunnerInstallFailed,
+    RunnerInstallProgressed,
+    RunnerInstallStarted,
 )
 
 logger = logging.getLogger(__name__)
@@ -113,6 +117,10 @@ class DownloadsView(Gtk.Box):
         bus.subscribe(DownloadCompleted, self._on_completed)
         bus.subscribe(DownloadFailed, self._on_failed)
         bus.subscribe(DownloadCancelled, self._on_cancelled)
+        bus.subscribe(RunnerInstallStarted, self._on_runner_started)
+        bus.subscribe(RunnerInstallProgressed, self._on_runner_progress)
+        bus.subscribe(RunnerInstallCompleted, self._on_runner_completed)
+        bus.subscribe(RunnerInstallFailed, self._on_runner_failed)
 
     # ---------------------------------------------------------------- #
     # Event handlers (run on GLib main loop via GLibEventBus)           #
@@ -147,3 +155,29 @@ class DownloadsView(Gtk.Box):
         if not self._rows:
             self._empty.set_visible(True)
             self._list.set_visible(False)
+
+    # ---------------------------------------------------------------- #
+    # Runner install event handlers                                      #
+    # ---------------------------------------------------------------- #
+
+    def _on_runner_started(self, event: RunnerInstallStarted) -> None:
+        row = _DownloadRow(event.runner_name, event.runner_name, "Runner")
+        self._rows[event.runner_name] = row
+        self._list.append(row)
+        self._empty.set_visible(False)
+        self._list.set_visible(True)
+
+    def _on_runner_progress(self, event: RunnerInstallProgressed) -> None:
+        row = self._rows.get(event.runner_name)
+        if row and event.progress:
+            row.update_progress(event.progress.fraction, event.progress.speed_human())
+
+    def _on_runner_completed(self, event: RunnerInstallCompleted) -> None:
+        row = self._rows.get(event.runner_name)
+        if row:
+            row.mark_done()
+
+    def _on_runner_failed(self, event: RunnerInstallFailed) -> None:
+        row = self._rows.get(event.runner_name)
+        if row:
+            row.mark_failed(event.reason)

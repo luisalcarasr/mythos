@@ -12,6 +12,7 @@ from typing import Optional
 from mythos.domain.events import (
     RunnerInstallCompleted,
     RunnerInstallFailed,
+    RunnerInstallProgressed,
     RunnerInstallStarted,
 )
 from mythos.domain.value_objects import AppName, ProtonRelease, WineRunnerType
@@ -70,9 +71,13 @@ class InstallProton(InstallProtonUseCase):
 
         try:
             def _on_progress(progress) -> None:
-                # RunnerInstallProgressed published inside the adapter
-                # via on_progress; no need to republish here.
-                pass
+                if self._bus:
+                    self._bus.publish(
+                        RunnerInstallProgressed(
+                            runner_name=release.name,
+                            progress=progress,
+                        )
+                    )
 
             installed = self._mgr.install(release, on_progress=_on_progress)
 

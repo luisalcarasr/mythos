@@ -155,6 +155,8 @@ def build() -> Container:
         wine_runtime=wine_runtime_port,
         settings_repo=settings_repo,
         event_bus=event_bus,
+        runner_manager=runner_manager,
+        install_proton=install_proton_uc,
     )
 
     enqueue_uc = EnqueueDownload(

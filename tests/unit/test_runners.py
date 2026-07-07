@@ -12,7 +12,7 @@ from mythos.adapters.output.fakes.fake_installed_repo import FakeInstalledRepo
 from mythos.adapters.output.fakes.fake_runner_manager import FakeRunnerManager
 from mythos.application.runners import InstallProton, ListProtonVersions, SetGameProton
 from mythos.domain.entities import InstalledInfo
-from mythos.domain.events import RunnerInstallCompleted, RunnerInstallStarted
+from mythos.domain.events import RunnerInstallCompleted, RunnerInstallProgressed, RunnerInstallStarted
 from mythos.domain.value_objects import (
     AppName,
     DiskSize,
@@ -93,13 +93,15 @@ def test_install_reports_progress(manager: FakeRunnerManager) -> None:
     uc = InstallProton(runner_manager=manager, event_bus=bus)
 
     release = manager.list_available(WineRunnerType.PROTON_GE)[0]
-    progress_calls: list[float] = []
-
-    # Patch manager to capture progress via fake (steps=3, delay=0)
     installed = uc.execute(release)
 
     assert installed.installed is True
     assert installed.install_path is not None
+    # RunnerInstallProgressed must be published for each step (steps=3)
+    progressed = bus.events_of(RunnerInstallProgressed)
+    assert len(progressed) == 3
+    assert all(e.runner_name == release.name for e in progressed)
+    assert progressed[-1].progress.fraction == 1.0
 
 
 def test_install_publishes_started_and_completed(manager: FakeRunnerManager) -> None:
@@ -169,3 +171,143 @@ def test_proton_release_label_proton() -> None:
         version="9.0-4",
     )
     assert r.label == "Proton — 9.0-4"
+
+
+# ---------------------------------------------------------------------------
+# LaunchGame — lazy runner download
+# ---------------------------------------------------------------------------
+
+
+def _make_launch_uc(manager: FakeRunnerManager, bus: FakeEventBus):
+    from mythos.adapters.output.fakes.fake_epic_store import FakeEpicStore
+    from mythos.adapters.output.fakes.fake_settings_repo import FakeSettingsRepo
+    from mythos.application.launch import LaunchGame
+    from mythos.domain.entities import Game, InstalledInfo
+    from mythos.domain.value_objects import (
+        AppName, DiskSize, GameStatus, InstallPath, LaunchOptions, Platform
+    )
+
+    game = Game(
+        app_name=AppName("Hades"),
+        title="Hades",
+        status=GameStatus.INSTALLED,
+        installed_info=InstalledInfo(
+            app_name=AppName("Hades"),
+            install_path=InstallPath(Path("/games/Hades")),
+            version="1.0",
+            platform=Platform.MAC,
+            install_size=DiskSize.from_gib(5),
+            launch_options=LaunchOptions(
+                wine_runner=WineRunnerType.PROTON_GE,
+                proton_version="GE-Proton9-16",
+            ),
+        ),
+    )
+    store = FakeEpicStore(games=[game], installed=[game.installed_info])
+    settings = FakeSettingsRepo()
+    install_uc = InstallProton(runner_manager=manager, event_bus=bus)
+    launch_uc = LaunchGame(
+        epic_store=store,
+        settings_repo=settings,
+        event_bus=bus,
+        runner_manager=manager,
+        install_proton=install_uc,
+    )
+    return launch_uc, game
+
+
+_PROTON_GE_OPTIONS = LaunchOptions(
+    wine_runner=WineRunnerType.PROTON_GE,
+    proton_version="GE-Proton9-16",
+)
+
+
+def test_launch_with_installed_runner_does_not_reinstall() -> None:
+    """If the runner is already installed, no install call should happen."""
+    manager = FakeRunnerManager(
+        pre_installed={"GE-Proton9-16"}, install_steps=3, step_delay=0
+    )
+    bus = FakeEventBus()
+    launch_uc, game = _make_launch_uc(manager, bus)
+
+    launch_uc.execute(AppName("Hades"), launch_options=_PROTON_GE_OPTIONS)
+
+    # No install events published
+    assert len(bus.events_of(RunnerInstallStarted)) == 0
+    assert len(bus.events_of(RunnerInstallCompleted)) == 0
+
+
+def test_launch_with_missing_runner_installs_before_launching() -> None:
+    """If the runner is not installed, install it, then launch."""
+    manager = FakeRunnerManager(
+        pre_installed=set(), install_steps=3, step_delay=0
+    )
+    bus = FakeEventBus()
+    launch_uc, game = _make_launch_uc(manager, bus)
+
+    launch_uc.execute(AppName("Hades"), launch_options=_PROTON_GE_OPTIONS)
+
+    # Runner was installed
+    assert len(bus.events_of(RunnerInstallStarted)) == 1
+    assert len(bus.events_of(RunnerInstallCompleted)) == 1
+    assert manager.is_installed(
+        next(r for r in manager.list_available() if r.version == "GE-Proton9-16")
+    )
+    # Game was still launched (FakeEpicStore returns pid 12345)
+    from mythos.domain.events import GameLaunched
+    assert len(bus.events_of(GameLaunched)) == 1
+
+
+def test_launch_aborts_when_runner_install_fails() -> None:
+    """If the runner install raises, the game must NOT be launched."""
+    from mythos.adapters.output.fakes.fake_epic_store import FakeEpicStore
+    from mythos.adapters.output.fakes.fake_settings_repo import FakeSettingsRepo
+    from mythos.application.launch import LaunchGame
+    from mythos.domain.entities import Game, InstalledInfo
+    from mythos.domain.value_objects import (
+        AppName, DiskSize, GameStatus, InstallPath, LaunchOptions, Platform
+    )
+
+    # Manager whose install() always raises
+    class FailingManager(FakeRunnerManager):
+        def install(self, release, on_progress):
+            raise RuntimeError("Simulated download failure")
+
+    manager = FailingManager(pre_installed=set())
+    bus = FakeEventBus()
+
+    game = Game(
+        app_name=AppName("Hades"),
+        title="Hades",
+        status=GameStatus.INSTALLED,
+        installed_info=InstalledInfo(
+            app_name=AppName("Hades"),
+            install_path=InstallPath(Path("/games/Hades")),
+            version="1.0",
+            platform=Platform.MAC,
+            install_size=DiskSize.from_gib(5),
+            launch_options=LaunchOptions(
+                wine_runner=WineRunnerType.PROTON_GE,
+                proton_version="GE-Proton9-16",
+            ),
+        ),
+    )
+    store = FakeEpicStore(games=[game], installed=[game.installed_info])
+    install_uc = InstallProton(runner_manager=manager, event_bus=bus)
+    launch_uc = LaunchGame(
+        epic_store=store,
+        settings_repo=FakeSettingsRepo(),
+        event_bus=bus,
+        runner_manager=manager,
+        install_proton=install_uc,
+    )
+
+    with pytest.raises(RuntimeError, match="Simulated download failure"):
+        launch_uc.execute(AppName("Hades"), launch_options=_PROTON_GE_OPTIONS)
+
+    # Game was NOT launched
+    from mythos.domain.events import GameLaunched
+    assert len(bus.events_of(GameLaunched)) == 0
+    # Failure event was published
+    from mythos.domain.events import RunnerInstallFailed
+    assert len(bus.events_of(RunnerInstallFailed)) == 1

@@ -41,10 +41,11 @@ class GameSettingsDialog(Adw.PreferencesDialog):
         self._build()
 
     def _build(self) -> None:
+        # "Game" is the first (default) tab
+        self._build_game_info()
         self._build_launch_options()
         if self._vm.is_installed:
             self._build_installation()
-        self._build_game_info()
         if self._vm.long_description:
             self._build_about()
         if self._vm.is_installed:
@@ -108,8 +109,34 @@ class GameSettingsDialog(Adw.PreferencesDialog):
         self.add(page)
 
     def _build_game_info(self) -> None:
-        page = Adw.PreferencesPage(title="Game Info")
-        group = Adw.PreferencesGroup(title="Game Info")
+        page = Adw.PreferencesPage(title="Game", icon_name="dialog-information-symbolic")
+
+        # -- Wide cover image ------------------------------------------ #
+        cover_path = self._vm.cover_wide_path or self._vm.cover_path
+        if cover_path and cover_path.exists():
+            picture = Gtk.Picture()
+            picture.set_filename(str(cover_path))
+            picture.set_content_fit(Gtk.ContentFit.COVER)
+            picture.set_size_request(-1, 200)
+            picture.set_hexpand(True)
+            picture.add_css_class("game-dialog-cover")
+
+            # Clamp to dialog width with rounded corners via CSS clip
+            cover_frame = Gtk.Frame()
+            cover_frame.set_child(picture)
+            cover_frame.set_margin_start(16)
+            cover_frame.set_margin_end(16)
+            cover_frame.set_margin_top(16)
+            cover_frame.set_margin_bottom(8)
+            cover_frame.add_css_class("game-dialog-cover-frame")
+
+            cover_group = Adw.PreferencesGroup()
+            cover_group.set_header_suffix(Gtk.Label())  # suppress default header spacing
+            cover_group.add(cover_frame)
+            page.add(cover_group)
+
+        # -- Metadata rows --------------------------------------------- #
+        group = Adw.PreferencesGroup()
 
         if self._vm.developer:
             row = Adw.ActionRow(title="Developer")
@@ -132,7 +159,9 @@ class GameSettingsDialog(Adw.PreferencesDialog):
             group.add(row)
 
         cloud_row = Adw.ActionRow(title="Cloud Saves")
-        cloud_row.set_subtitle("Supported" if self._vm.supports_cloud_saves else "Not supported")
+        cloud_row.set_subtitle(
+            "Supported" if self._vm.supports_cloud_saves else "Not supported"
+        )
         group.add(cloud_row)
 
         if self._vm.save_path:

@@ -18,12 +18,10 @@ class GameSettingsDialog(Adw.PreferencesDialog):
     """
     Game settings dialog with preferences pages.
 
-    Shows:
-      - Launch Options (editable)
-      - Installation info (read-only)
-      - Game Info (read-only)
-      - About
-      - Actions (Verify Files, Uninstall)
+    Tabs:
+      - Game (default): cover image, game info, installation details, actions
+      - Launch Options: launch parameters, offline mode
+      - About: long description (only when present)
     """
 
     def __init__(self, vm: GameViewModel) -> None:
@@ -41,15 +39,10 @@ class GameSettingsDialog(Adw.PreferencesDialog):
         self._build()
 
     def _build(self) -> None:
-        # "Game" is the first (default) tab
-        self._build_game_info()
-        self._build_launch_options()
-        if self._vm.is_installed:
-            self._build_installation()
+        self._build_game_info()       # combined "Game" tab (default)
+        self._build_launch_options()  # own tab
         if self._vm.long_description:
-            self._build_about()
-        if self._vm.is_installed:
-            self._build_actions()
+            self._build_about()       # own tab, only when present
 
     # -- Pages -------------------------------------------------------- #
 
@@ -71,8 +64,7 @@ class GameSettingsDialog(Adw.PreferencesDialog):
         page.add(group)
         self.add(page)
 
-    def _build_installation(self) -> None:
-        page = Adw.PreferencesPage(title="Installation")
+    def _installation_group(self) -> Adw.PreferencesGroup:
         group = Adw.PreferencesGroup(title="Installation")
 
         if self._vm.install_path:
@@ -105,8 +97,7 @@ class GameSettingsDialog(Adw.PreferencesDialog):
             row.set_subtitle(self._vm.executable)
             group.add(row)
 
-        page.add(group)
-        self.add(page)
+        return group
 
     def _build_game_info(self) -> None:
         page = Adw.PreferencesPage(title="Game", icon_name="dialog-information-symbolic")
@@ -165,6 +156,12 @@ class GameSettingsDialog(Adw.PreferencesDialog):
             group.add(save_row)
 
         page.add(group)
+
+        # -- Installation & Actions (installed games only) ------------- #
+        if self._vm.is_installed:
+            page.add(self._installation_group())
+            page.add(self._actions_group())
+
         self.add(page)
 
     def _build_about(self) -> None:
@@ -183,8 +180,7 @@ class GameSettingsDialog(Adw.PreferencesDialog):
         page.add(group)
         self.add(page)
 
-    def _build_actions(self) -> None:
-        page = Adw.PreferencesPage(title="Actions")
+    def _actions_group(self) -> Adw.PreferencesGroup:
         group = Adw.PreferencesGroup(title="Actions")
 
         verify_row = Adw.ActionRow(title="Verify Files")
@@ -205,8 +201,7 @@ class GameSettingsDialog(Adw.PreferencesDialog):
         uninstall_row.set_activatable_widget(uninstall_btn)
         group.add(uninstall_row)
 
-        page.add(group)
-        self.add(page)
+        return group
 
     # -- Handlers ----------------------------------------------------- #
 

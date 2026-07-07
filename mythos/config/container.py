@@ -44,6 +44,7 @@ class Container:
     settings_repo: object = field(default=None, repr=False)
     download_queue_port: object = field(default=None, repr=False)
     event_bus: object = field(default=None, repr=False)
+    runner_manager_port: object = field(default=None, repr=False)
 
     # ------------------------------------------------------------------ #
     # Use cases (application layer)                                        #
@@ -64,6 +65,9 @@ class Container:
     sync_saves_use_case: object = field(default=None, repr=False)
     get_settings_use_case: object = field(default=None, repr=False)
     update_settings_use_case: object = field(default=None, repr=False)
+    list_proton_versions_use_case: object = field(default=None, repr=False)
+    install_proton_use_case: object = field(default=None, repr=False)
+    set_game_proton_use_case: object = field(default=None, repr=False)
 
 
 def build() -> Container:
@@ -98,6 +102,8 @@ def build() -> Container:
     from mythos.application.downloads import EnqueueDownload, CancelDownload
     from mythos.application.saves import SyncSaves
     from mythos.application.settings import GetSettings, UpdateSettings
+    from mythos.application.runners import ListProtonVersions, InstallProton, SetGameProton
+    from mythos.adapters.output.runners.github_runner_manager import GitHubRunnerManager
 
     logger.info("Building dependency container…")
 
@@ -167,6 +173,11 @@ def build() -> Container:
     get_settings_uc = GetSettings(settings_repo=settings_repo)
     update_settings_uc = UpdateSettings(settings_repo=settings_repo)
 
+    runner_manager = GitHubRunnerManager()
+    list_proton_uc = ListProtonVersions(runner_manager=runner_manager)
+    install_proton_uc = InstallProton(runner_manager=runner_manager, event_bus=event_bus)
+    set_game_proton_uc = SetGameProton(installed_repo=installed_library_repo)
+
     logger.info("Container ready.")
 
     return Container(
@@ -179,6 +190,7 @@ def build() -> Container:
         settings_repo=settings_repo,
         download_queue_port=download_queue_port,
         event_bus=event_bus,
+        runner_manager_port=runner_manager,
         login_use_case=login_uc,
         logout_use_case=logout_uc,
         get_session_use_case=get_session_uc,
@@ -195,4 +207,7 @@ def build() -> Container:
         sync_saves_use_case=sync_saves_uc,
         get_settings_use_case=get_settings_uc,
         update_settings_use_case=update_settings_uc,
+        list_proton_versions_use_case=list_proton_uc,
+        install_proton_use_case=install_proton_uc,
+        set_game_proton_use_case=set_game_proton_uc,
     )

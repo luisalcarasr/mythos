@@ -178,7 +178,7 @@ class LibraryView(Gtk.Box):
             self._flow.append(card)
 
     def _on_game_settings(self, vm: GameViewModel) -> None:
-        dialog = GameSettingsDialog(vm)
+        dialog = GameSettingsDialog(vm, self._c)
         dialog.present(self._window)
 
     def _on_game_edit(self, vm: GameViewModel) -> None:

@@ -154,8 +154,14 @@ class GameCard(Gtk.FlowBoxChild):
 
     def _on_settings_clicked(self, btn: Gtk.Button) -> None:
         from mythos.adapters.input.gtk.dialogs.game_settings_dialog import GameSettingsDialog
-        dialog = GameSettingsDialog(self._vm)
-        dialog.present(self.get_root())
+        # Walk up the widget tree to reach the window, which carries the container
+        root = self.get_root()
+        container = getattr(root, "_c", None)
+        if container is None:
+            logger.warning("GameCard: could not find container on root window")
+            return
+        dialog = GameSettingsDialog(self._vm, container)
+        dialog.present(root)
 
     def _on_action_clicked(self, _btn: Gtk.Button) -> None:
         status = self._vm.status

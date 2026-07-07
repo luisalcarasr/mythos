@@ -42,7 +42,12 @@ class AppPaths:
     icon_cache_dir: Path = cache_dir / "icons"
 
     # ------------------------------------------------------------------ #
-    # Logs                                                                 #
+    # Runners                                                             #
+    # ------------------------------------------------------------------ #
+    runners_dir: Path = data_dir / "runners"
+
+    # ------------------------------------------------------------------ #
+    # Logs                                                                #
     # ------------------------------------------------------------------ #
     log_dir: Path = Path(_dirs.user_log_dir)
     log_file: Path = log_dir / "mythos.log"
@@ -56,6 +61,7 @@ class AppPaths:
             "cache_dir",
             "image_cache_dir",
             "icon_cache_dir",
+            "runners_dir",
             "log_dir",
         ):
             path: Path = getattr(cls, attr)

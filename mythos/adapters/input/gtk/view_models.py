@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Optional
 
 from mythos.domain.entities import DownloadTask, Game
-from mythos.domain.value_objects import GameStatus
+from mythos.domain.value_objects import GameStatus, ProtonRelease, WineRunnerType
 
 
 @dataclass
@@ -51,6 +51,8 @@ class GameViewModel:
     can_run_offline: bool
     launch_parameters: str
     save_path: str
+    wine_runner: WineRunnerType = WineRunnerType.NONE
+    proton_version: str = ""
 
     @staticmethod
     def from_game(game: Game) -> "GameViewModel":
@@ -93,6 +95,8 @@ class GameViewModel:
             can_run_offline=info.can_run_offline if info else False,
             launch_parameters=info.launch_parameters if info else "",
             save_path=info.save_path if info else "",
+            wine_runner=info.launch_options.wine_runner if info else WineRunnerType.NONE,
+            proton_version=info.launch_options.proton_version if info else "",
         )
 
     @property
@@ -134,6 +138,36 @@ class DownloadTaskViewModel:
             speed_human=task.progress.speed_human(),
             status=task.status,
             error_message=task.error_message,
+        )
+
+
+@dataclass
+class ProtonReleaseViewModel:
+    """Presentation state for a single Proton / Proton-GE build."""
+    name: str
+    version: str
+    runner_type: WineRunnerType
+    label: str          # e.g. "Proton-GE — GE-Proton9-20"
+    installed: bool
+    download_url: str
+    size_human: str     # e.g. "366.0 MiB"
+
+    @staticmethod
+    def from_release(release: ProtonRelease) -> "ProtonReleaseViewModel":
+        from mythos.domain.value_objects import DiskSize
+        size_human = (
+            DiskSize(release.size_bytes).human_readable()
+            if release.size_bytes
+            else "Unknown size"
+        )
+        return ProtonReleaseViewModel(
+            name=release.name,
+            version=release.version,
+            runner_type=release.runner_type,
+            label=release.label,
+            installed=release.installed,
+            download_url=release.download_url,
+            size_human=size_human,
         )
 
 

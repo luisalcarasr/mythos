@@ -57,9 +57,10 @@ class SyncDirection(Enum):
 
 
 class WineRunnerType(str, Enum):
-    """Type of Wine runner in use."""
+    """Type of Wine/Proton runner in use."""
     WINE = "wine"
     PROTON = "proton"
+    PROTON_GE = "proton-ge"
     CROSSOVER = "crossover"
     NONE = "none"
 
@@ -185,8 +186,50 @@ class LaunchOptions:
     extra_env: dict[str, str] = None  # type: ignore[assignment]
     wrapper_command: str = ""
     offline: bool = False
+    proton_version: str = ""  # e.g. "GE-Proton9-20" or "9.0-4"
 
     def __post_init__(self) -> None:
         # Ensure extra_env is never None
         if self.extra_env is None:
             object.__setattr__(self, "extra_env", {})
+
+
+@dataclass(frozen=True)
+class ProtonRelease:
+    """
+    A single Proton or Proton-GE build available for download or already
+    installed locally.
+
+    Attributes
+    ----------
+    name:
+        Human-readable label, e.g. ``"GE-Proton9-20"`` or ``"Proton 9.0-4"``.
+    runner_type:
+        ``WineRunnerType.PROTON`` or ``WineRunnerType.PROTON_GE``.
+    version:
+        Version tag used for sorting and identification (same as *name*
+        for Proton-GE; ``"9.0-4"`` for upstream Proton).
+    download_url:
+        Direct URL to the release tarball.  Empty when the release is
+        already installed (no download needed).
+    installed:
+        ``True`` when the build has been extracted to *install_path*.
+    install_path:
+        Absolute path to the extracted runtime directory, or ``None``
+        when not yet installed.
+    size_bytes:
+        Download size in bytes (0 when unknown).
+    """
+    name: str
+    runner_type: WineRunnerType
+    version: str
+    download_url: str = ""
+    installed: bool = False
+    install_path: Path | None = None
+    size_bytes: int = 0
+
+    @property
+    def label(self) -> str:
+        """Short UI label, e.g. 'Proton-GE — GE-Proton9-20'."""
+        prefix = "Proton-GE" if self.runner_type == WineRunnerType.PROTON_GE else "Proton"
+        return f"{prefix} — {self.version}"

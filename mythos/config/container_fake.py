@@ -37,6 +37,7 @@ def build_fake() -> Container:
     from mythos.adapters.output.fakes.fake_event_bus import FakeEventBus
     from mythos.adapters.output.fakes.fake_image_cache import FakeImageCache
     from mythos.adapters.output.fakes.fake_installed_repo import FakeInstalledRepo
+    from mythos.adapters.output.fakes.fake_runner_manager import FakeRunnerManager
     from mythos.adapters.output.fakes.fake_settings_repo import FakeSettingsRepo
     from mythos.adapters.output.fakes.fake_wine_runtime import FakeWineRuntime
 
@@ -62,6 +63,7 @@ def build_fake() -> Container:
     from mythos.application.library import ListLibrary, RefreshLibrary
     from mythos.application.saves import SyncSaves
     from mythos.application.settings import GetSettings, UpdateSettings
+    from mythos.application.runners import ListProtonVersions, InstallProton, SetGameProton
 
     logger.info("Building FAKE dependency container (design mode)…")
 
@@ -87,6 +89,8 @@ def build_fake() -> Container:
     image_cache_port = FakeImageCache()
     for game in games:
         image_cache_port.preload(game.app_name, game.title)
+
+    runner_manager = FakeRunnerManager()
 
     # -- Use cases ------------------------------------------------------- #
     login_uc = Login(auth_session_repo=auth_session_repo, event_bus=event_bus)
@@ -138,6 +142,10 @@ def build_fake() -> Container:
     get_settings_uc = GetSettings(settings_repo=settings_repo)
     update_settings_uc = UpdateSettings(settings_repo=settings_repo)
 
+    list_proton_uc = ListProtonVersions(runner_manager=runner_manager)
+    install_proton_uc = InstallProton(runner_manager=runner_manager, event_bus=event_bus)
+    set_game_proton_uc = SetGameProton(installed_repo=installed_library_repo)
+
     logger.info("Fake container ready — %d demo games loaded.", len(games))
 
     return Container(
@@ -150,6 +158,7 @@ def build_fake() -> Container:
         settings_repo=settings_repo,
         download_queue_port=download_queue_port,
         event_bus=event_bus,
+        runner_manager_port=runner_manager,
         login_use_case=login_uc,
         logout_use_case=logout_uc,
         get_session_use_case=get_session_uc,
@@ -166,4 +175,7 @@ def build_fake() -> Container:
         sync_saves_use_case=sync_saves_uc,
         get_settings_use_case=get_settings_uc,
         update_settings_use_case=update_settings_uc,
+        list_proton_versions_use_case=list_proton_uc,
+        install_proton_use_case=install_proton_uc,
+        set_game_proton_use_case=set_game_proton_uc,
     )

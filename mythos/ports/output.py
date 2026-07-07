@@ -28,6 +28,7 @@ from mythos.domain.value_objects import (
     LaunchOptions,
     Platform,
     Progress,
+    ProtonRelease,
     SyncDirection,
     WineRunnerType,
 )
@@ -339,6 +340,63 @@ class DownloadQueuePort(ABC):
     @abstractmethod
     def get_active(self) -> Optional[DownloadTask]:
         """Return the currently-running task, or ``None``."""
+
+
+# ------------------------------------------------------------------ #
+# Runner manager port                                                  #
+# ------------------------------------------------------------------ #
+
+
+class RunnerManagerPort(ABC):
+    """
+    Manages Proton and Proton-GE runtime downloads and installations.
+
+    Supported runner types: ``WineRunnerType.PROTON`` and
+    ``WineRunnerType.PROTON_GE``.
+    """
+
+    @abstractmethod
+    def list_available(
+        self,
+        runner_type: Optional[WineRunnerType] = None,
+    ) -> list[ProtonRelease]:
+        """
+        Return known releases available for download.
+
+        Parameters
+        ----------
+        runner_type:
+            Filter to ``PROTON`` or ``PROTON_GE``; ``None`` returns both.
+        """
+
+    @abstractmethod
+    def list_installed(
+        self,
+        runner_type: Optional[WineRunnerType] = None,
+    ) -> list[ProtonRelease]:
+        """Return releases that are already extracted on disk."""
+
+    @abstractmethod
+    def install(
+        self,
+        release: ProtonRelease,
+        on_progress: Callable[[Progress], None],
+    ) -> ProtonRelease:
+        """
+        Download, extract, and configure *release*.
+
+        Calls *on_progress* periodically.  Returns the updated
+        ``ProtonRelease`` with ``installed=True`` and ``install_path``
+        set.  Raises ``RuntimeError`` on failure.
+        """
+
+    @abstractmethod
+    def remove(self, release: ProtonRelease) -> None:
+        """Delete the installed runtime from disk."""
+
+    @abstractmethod
+    def is_installed(self, release: ProtonRelease) -> bool:
+        """Return ``True`` when *release* is already installed."""
 
 
 # ------------------------------------------------------------------ #

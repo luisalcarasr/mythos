@@ -1,17 +1,26 @@
 from __future__ import annotations
 
 import logging
+import threading
+from typing import TYPE_CHECKING
 
 import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 
-from gi.repository import Adw, Gdk, Gtk
+from gi.repository import Adw, Gdk, GLib, Gtk
 
-from mythos.adapters.input.gtk.view_models import GameViewModel
+from mythos.adapters.input.gtk.view_models import GameViewModel, ProtonReleaseViewModel
+from mythos.domain.value_objects import ProtonRelease, WineRunnerType
+
+if TYPE_CHECKING:
+    from mythos.config.container import Container
 
 logger = logging.getLogger(__name__)
+
+_RUNNER_LABELS = ["None", "Proton", "Proton-GE"]
+_RUNNER_TYPES = [WineRunnerType.NONE, WineRunnerType.PROTON, WineRunnerType.PROTON_GE]
 
 
 class GameSettingsDialog(Adw.PreferencesDialog):
@@ -20,13 +29,14 @@ class GameSettingsDialog(Adw.PreferencesDialog):
 
     Tabs:
       - Game (default): cover image, game info, installation details, actions
-      - Runner: launch parameters, offline mode
+      - Runner: runner-type selector, Proton version dropdown, launch params
       - About: long description (only when present)
     """
 
-    def __init__(self, vm: GameViewModel) -> None:
+    def __init__(self, vm: GameViewModel, container: "Container") -> None:
         super().__init__()
         self._vm = vm
+        self._c = container
 
         self.set_title(f"Settings \u2014 {vm.title}")
         self.set_content_width(620)
@@ -35,6 +45,15 @@ class GameSettingsDialog(Adw.PreferencesDialog):
 
         self._launch_params_row: Adw.EntryRow | None = None
         self._offline_row: Adw.SwitchRow | None = None
+
+        # Runner tab state
+        self._all_releases: list[ProtonReleaseViewModel] = []
+        self._filtered_releases: list[ProtonReleaseViewModel] = []
+        self._version_combo: Adw.ComboRow | None = None
+        self._version_model: Gtk.StringList | None = None
+        self._install_btn: Gtk.Button | None = None
+        self._progress_bar: Gtk.ProgressBar | None = None
+        self._progress_row: Adw.ActionRow | None = None
 
         self._build()
 
@@ -47,22 +66,236 @@ class GameSettingsDialog(Adw.PreferencesDialog):
     # -- Pages -------------------------------------------------------- #
 
     def _build_launch_options(self) -> None:
-        page = Adw.PreferencesPage(title="Runner")
-        group = Adw.PreferencesGroup(title="Runner")
+        page = Adw.PreferencesPage(
+            title="Runner", icon_name="media-playback-start-symbolic"
+        )
+
+        # -- Runner type selector ------------------------------------- #
+        runner_group = Adw.PreferencesGroup(title="Proton Runner")
+
+        runner_model = Gtk.StringList.new(_RUNNER_LABELS)
+        current_idx = 0
+        if self._vm.wine_runner in _RUNNER_TYPES:
+            current_idx = _RUNNER_TYPES.index(self._vm.wine_runner)
+
+        self._runner_combo = Adw.ComboRow(title="Runner", model=runner_model)
+        self._runner_combo.set_selected(current_idx)
+        self._runner_combo.connect("notify::selected", self._on_runner_type_changed)
+        runner_group.add(self._runner_combo)
+
+        page.add(runner_group)
+
+        # -- Proton version dropdown ----------------------------------- #
+        version_group = Adw.PreferencesGroup(title="Proton Version")
+
+        self._version_model = Gtk.StringList.new([])
+        self._version_combo = Adw.ComboRow(title="Proton version")
+        self._version_combo.set_model(self._version_model)
+        self._version_combo.connect("notify::selected", self._on_version_selected)
+        version_group.add(self._version_combo)
+
+        # Install button row
+        install_row = Adw.ActionRow(title="Download & Install")
+        install_row.set_subtitle("Download the selected version if not yet installed")
+        self._install_btn = Gtk.Button(label="Install")
+        self._install_btn.add_css_class("suggested-action")
+        self._install_btn.set_valign(Gtk.Align.CENTER)
+        self._install_btn.connect("clicked", self._on_install_clicked)
+        install_row.add_suffix(self._install_btn)
+        version_group.add(install_row)
+
+        # Progress row (hidden until install starts)
+        self._progress_row = Adw.ActionRow(title="Installing…")
+        self._progress_bar = Gtk.ProgressBar()
+        self._progress_bar.set_hexpand(True)
+        self._progress_bar.set_valign(Gtk.Align.CENTER)
+        self._progress_row.add_suffix(self._progress_bar)
+        self._progress_row.set_visible(False)
+        version_group.add(self._progress_row)
+
+        page.add(version_group)
+
+        # -- Launch options ------------------------------------------- #
+        launch_group = Adw.PreferencesGroup(title="Launch Options")
 
         self._launch_params_row = Adw.EntryRow(title="Launch Parameters")
         self._launch_params_row.set_text(self._vm.launch_parameters or "")
         self._launch_params_row.connect("changed", self._on_launch_params_changed)
-        group.add(self._launch_params_row)
+        launch_group.add(self._launch_params_row)
 
         self._offline_row = Adw.SwitchRow(title="Offline Mode")
-        self._offline_row.set_subtitle("Allow launching the game without an internet connection")
+        self._offline_row.set_subtitle(
+            "Allow launching the game without an internet connection"
+        )
         self._offline_row.set_active(self._vm.can_run_offline)
         self._offline_row.connect("notify::active", self._on_offline_toggled)
-        group.add(self._offline_row)
+        launch_group.add(self._offline_row)
 
-        page.add(group)
+        page.add(launch_group)
         self.add(page)
+
+        # Populate versions for the current runner type
+        self._load_releases()
+
+    # -- Runner tab helpers ------------------------------------------- #
+
+    def _load_releases(self) -> None:
+        """Load all Proton releases from the use case in a background thread."""
+        def _fetch() -> None:
+            try:
+                releases = self._c.list_proton_versions_use_case.execute()
+                vms = [ProtonReleaseViewModel.from_release(r) for r in releases]
+                GLib.idle_add(self._on_releases_loaded, vms)
+            except Exception as exc:
+                logger.error("Failed to load Proton releases: %s", exc)
+
+        threading.Thread(target=_fetch, daemon=True, name="runner-list").start()
+
+    def _on_releases_loaded(self, releases: list[ProtonReleaseViewModel]) -> bool:
+        self._all_releases = releases
+        self._refresh_version_dropdown()
+        return GLib.SOURCE_REMOVE
+
+    def _current_runner_type(self) -> WineRunnerType:
+        idx = self._runner_combo.get_selected() if self._runner_combo else 0
+        if 0 <= idx < len(_RUNNER_TYPES):
+            return _RUNNER_TYPES[idx]
+        return WineRunnerType.NONE
+
+    def _refresh_version_dropdown(self) -> None:
+        if self._version_model is None or self._version_combo is None:
+            return
+
+        runner_type = self._current_runner_type()
+
+        if runner_type == WineRunnerType.NONE:
+            self._filtered_releases = []
+        else:
+            self._filtered_releases = [
+                r for r in self._all_releases if r.runner_type == runner_type
+            ]
+
+        # Rebuild the string list
+        while self._version_model.get_n_items():
+            self._version_model.remove(0)
+
+        if not self._filtered_releases:
+            self._version_model.append("No versions available")
+            self._version_combo.set_sensitive(False)
+            if self._install_btn:
+                self._install_btn.set_sensitive(False)
+            return
+
+        self._version_combo.set_sensitive(True)
+        selected_idx = 0
+        for i, rel in enumerate(self._filtered_releases):
+            suffix = " ✓" if rel.installed else f"  ({rel.size_human})"
+            self._version_model.append(f"{rel.label}{suffix}")
+            if rel.version == self._vm.proton_version:
+                selected_idx = i
+
+        self._version_combo.set_selected(selected_idx)
+        self._update_install_button()
+
+    def _update_install_button(self) -> None:
+        if not self._install_btn or not self._filtered_releases:
+            return
+        idx = self._version_combo.get_selected() if self._version_combo else 0
+        if 0 <= idx < len(self._filtered_releases):
+            rel = self._filtered_releases[idx]
+            self._install_btn.set_label("Installed" if rel.installed else "Install")
+            self._install_btn.set_sensitive(not rel.installed)
+
+    def _on_runner_type_changed(self, combo: Adw.ComboRow, _: object) -> None:
+        self._refresh_version_dropdown()
+
+    def _on_version_selected(self, combo: Adw.ComboRow, _: object) -> None:
+        self._update_install_button()
+        idx = combo.get_selected()
+        if not self._filtered_releases or idx >= len(self._filtered_releases):
+            return
+        rel = self._filtered_releases[idx]
+        if rel.installed and self._vm.is_installed:
+            # Persist per-game selection immediately
+            from mythos.domain.value_objects import AppName
+            try:
+                self._c.set_game_proton_use_case.execute(
+                    AppName(self._vm.app_name), rel.runner_type, rel.version
+                )
+                self._vm = self._vm.__class__(
+                    **{**self._vm.__dict__, "wine_runner": rel.runner_type,
+                       "proton_version": rel.version}
+                )
+            except Exception as exc:
+                logger.error("Failed to set game runner: %s", exc)
+
+    def _on_install_clicked(self, _btn: Gtk.Button) -> None:
+        idx = self._version_combo.get_selected() if self._version_combo else -1
+        if idx < 0 or idx >= len(self._filtered_releases):
+            return
+        vm = self._filtered_releases[idx]
+
+        # Find the matching ProtonRelease domain object
+        try:
+            all_releases = self._c.list_proton_versions_use_case.execute()
+        except Exception as exc:
+            logger.error("Cannot fetch releases: %s", exc)
+            return
+
+        release = next(
+            (r for r in all_releases if r.version == vm.version
+             and r.runner_type == vm.runner_type),
+            None,
+        )
+        if release is None:
+            return
+
+        self._start_install(release)
+
+    def _start_install(self, release: ProtonRelease) -> None:
+        if self._install_btn:
+            self._install_btn.set_sensitive(False)
+        if self._progress_row:
+            self._progress_row.set_visible(True)
+            self._progress_row.set_title(f"Installing {release.name}…")
+        if self._progress_bar:
+            self._progress_bar.set_fraction(0.0)
+
+        def _worker() -> None:
+            try:
+                self._c.install_proton_use_case.execute(release)
+                GLib.idle_add(self._on_install_done, release, None)
+            except Exception as exc:
+                GLib.idle_add(self._on_install_done, release, str(exc))
+
+        threading.Thread(target=_worker, daemon=True, name="runner-install").start()
+
+        # Subscribe to progress events to update the bar
+        from mythos.domain.events import RunnerInstallProgressed
+        def _on_progress(event) -> None:
+            if event.runner_name == release.name and event.progress:
+                GLib.idle_add(self._set_progress, event.progress.fraction)
+
+        self._c.event_bus.subscribe(RunnerInstallProgressed, _on_progress)
+
+    def _set_progress(self, fraction: float) -> bool:
+        if self._progress_bar:
+            self._progress_bar.set_fraction(fraction)
+        return GLib.SOURCE_REMOVE
+
+    def _on_install_done(
+        self, release: ProtonRelease, error: str | None
+    ) -> bool:
+        if self._progress_row:
+            self._progress_row.set_visible(False)
+        if error:
+            logger.error("Install failed: %s", error)
+            if self._install_btn:
+                self._install_btn.set_label("Retry")
+                self._install_btn.set_sensitive(True)
+        else:
+            self._load_releases()  # refresh to show ✓
+        return GLib.SOURCE_REMOVE
 
     def _installation_group(self) -> Adw.PreferencesGroup:
         group = Adw.PreferencesGroup(title="Installation")

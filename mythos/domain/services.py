@@ -12,7 +12,6 @@ They must not import anything outside of the ``domain`` package.
 from __future__ import annotations
 
 import shlex
-import sys
 from pathlib import Path
 from typing import Optional
 
@@ -109,7 +108,6 @@ class LaunchCommandBuilder:
 
         info: InstalledInfo = game.installed_info
         opts: LaunchOptions = extra_options or info.launch_options
-        host = Platform.current()
 
         cmd: list[str] = []
 
@@ -117,9 +115,9 @@ class LaunchCommandBuilder:
         if opts.wrapper_command:
             cmd.extend(shlex.split(opts.wrapper_command))
 
-        # Wine / Proton when game is a Windows game on Linux
-        if info.platform == Platform.WINDOWS and host != Platform.WINDOWS:
-            cmd.extend(self._wine_prefix(opts, host))
+        # Wine / Proton when game is a Windows game
+        if info.platform == Platform.WINDOWS:
+            cmd.extend(self._wine_prefix(opts))
 
         # Game executable
         exe = info.install_path.value / info.executable
@@ -128,7 +126,7 @@ class LaunchCommandBuilder:
         return cmd
 
     @staticmethod
-    def _wine_prefix(opts: LaunchOptions, host: Platform) -> list[str]:
+    def _wine_prefix(opts: LaunchOptions) -> list[str]:
         runner = opts.wine_runner
         exe = opts.wine_executable
 

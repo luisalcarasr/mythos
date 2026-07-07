@@ -171,10 +171,11 @@ class LegendaryEpicStore(EpicStorePort):
         app_name: AppName,
         on_progress: Callable[[Progress], None],
     ) -> InstalledInfo:
+        igame = self._gw.get_installed_game(str(app_name))
         return self.install_game(
             app_name=app_name,
-            install_path=Path(self._gw.get_installed_game(str(app_name)).install_path).parent,
-            platform=Platform.current(),
+            install_path=Path(igame.install_path).parent,
+            platform=Platform(igame.platform),  # use stored platform
             on_progress=on_progress,
         )
 

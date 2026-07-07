@@ -10,7 +10,6 @@ All classes in this module are frozen dataclasses with no external deps.
 from __future__ import annotations
 
 import re
-import sys
 from dataclasses import dataclass
 from enum import Enum, auto
 from pathlib import Path
@@ -28,9 +27,7 @@ class Platform(str, Enum):
 
     @staticmethod
     def current() -> Platform:
-        if sys.platform.startswith("linux"):
-            return Platform.LINUX
-        return Platform.WINDOWS
+        return Platform.LINUX
 
 
 class GameStatus(Enum):

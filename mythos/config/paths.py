@@ -6,7 +6,6 @@ XDG-compliant path resolution for all Mythos data files.
 
 All paths are derived from platformdirs so they follow OS conventions:
   - Linux:  ~/.config/mythos, ~/.local/share/mythos, ~/.cache/mythos
-  - Windows: %APPDATA%/mythos  (future)
 """
 
 from __future__ import annotations

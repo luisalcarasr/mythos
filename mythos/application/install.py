@@ -52,11 +52,7 @@ class InstallGame(InstallGameUseCase):
     ) -> InstalledInfo:
         settings = self._settings.load()
         resolved_path = self._planner.resolve_install_path(install_path, settings)
-        if platform is None:
-            host = Platform.current()
-            resolved_platform = Platform.WINDOWS if host == Platform.LINUX else host
-        else:
-            resolved_platform = platform
+        resolved_platform = platform or Platform.WINDOWS
 
         logger.info(
             "Installing %s to %s (platform=%s) — will run via Proton on Linux",

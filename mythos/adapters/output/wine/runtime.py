@@ -15,7 +15,6 @@ from __future__ import annotations
 import logging
 import shutil
 import subprocess
-import sys
 from pathlib import Path
 from typing import Optional
 
@@ -33,9 +32,7 @@ class WineRuntimeAdapter(WineRuntimePort):
     def list_runtimes(self) -> list[dict]:
         runtimes: list[dict] = []
 
-        if sys.platform.startswith("linux"):
-            runtimes.extend(self._find_proton_runtimes())
-
+        runtimes.extend(self._find_proton_runtimes())
         wine = self._find_system_wine()
         if wine:
             runtimes.append(wine)

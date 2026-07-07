@@ -8,13 +8,15 @@ Layout:
   Adw.ApplicationWindow
   └── Adw.ToolbarView
       ├── Adw.HeaderBar (top)
-      └── Gtk.Stack (content)
-          ├── "login"    → LoginView
-          ├── "library"  → LibraryView
-          ├── "downloads"→ DownloadsView
-          └── "settings" → SettingsView
+      │   ├── [start] refresh button
+      │   └── [end]   info/settings button → Adw.PreferencesDialog
+      └── Adw.ViewStack (content)
+          ├── "library"   → LibraryView
+          └── "downloads" → DownloadsView
 
-Navigation between views is done via ``switch_view(name)``.
+Settings are no longer a navigation tab.  They open as a modal
+``Adw.PreferencesDialog`` from the info button (⋮ / gear) in the
+header bar — following the GNOME HIG pattern for app preferences.
 """
 
 from __future__ import annotations
@@ -35,7 +37,6 @@ logger = logging.getLogger(__name__)
 
 _ICON_LIBRARY = "view-grid-symbolic"
 _ICON_DOWNLOADS = "folder-download-symbolic"
-_ICON_SETTINGS = "preferences-system-symbolic"
 
 
 class MythosWindow(Adw.ApplicationWindow):
@@ -66,16 +67,24 @@ class MythosWindow(Adw.ApplicationWindow):
         self._header = Adw.HeaderBar()
         toolbar_view.add_top_bar(self._header)
 
-        # View switcher (top, library / downloads / settings)
+        # View switcher (library / downloads only — settings moved to dialog)
         self._view_stack = Adw.ViewStack()
-        self._view_switcher = Adw.ViewSwitcher(stack=self._view_stack, policy=Adw.ViewSwitcherPolicy.WIDE)
+        self._view_switcher = Adw.ViewSwitcher(
+            stack=self._view_stack, policy=Adw.ViewSwitcherPolicy.WIDE
+        )
         self._header.set_title_widget(self._view_switcher)
 
-        # Search / refresh buttons
+        # [start] Refresh button
         self._btn_refresh = Gtk.Button(icon_name="view-refresh-symbolic")
         self._btn_refresh.set_tooltip_text("Refresh library")
         self._btn_refresh.connect("clicked", self._on_refresh_clicked)
         self._header.pack_start(self._btn_refresh)
+
+        # [end] Info / settings button
+        self._btn_info = Gtk.Button(icon_name="preferences-system-symbolic")
+        self._btn_info.set_tooltip_text("Preferences")
+        self._btn_info.connect("clicked", self._on_info_clicked)
+        self._header.pack_end(self._btn_info)
 
         toolbar_view.set_content(self._view_stack)
 
@@ -92,7 +101,11 @@ class MythosWindow(Adw.ApplicationWindow):
         self._login_view = LoginView(container=self._c, on_login=self._on_login)
         self._library_view = LibraryView(container=self._c, window=self)
         self._downloads_view = DownloadsView(container=self._c)
+
+        # Settings open as a modal Adw.PreferencesDialog (not in the stack)
         self._settings_view = SettingsView(container=self._c)
+        self._prefs_dialog = Adw.PreferencesDialog()
+        self._prefs_dialog.add(self._settings_view)
 
         # Login uses a separate overlay (not in the stack)
         self._login_overlay = Adw.Dialog()
@@ -106,9 +119,6 @@ class MythosWindow(Adw.ApplicationWindow):
         )
         self._view_stack.add_titled_with_icon(
             self._downloads_view, "downloads", "Downloads", _ICON_DOWNLOADS
-        )
-        self._view_stack.add_titled_with_icon(
-            self._settings_view, "settings", "Settings", _ICON_SETTINGS
         )
 
     # ---------------------------------------------------------------- #
@@ -150,6 +160,9 @@ class MythosWindow(Adw.ApplicationWindow):
 
     def _on_refresh_clicked(self, btn: Gtk.Button) -> None:
         self._library_view.refresh()
+
+    def _on_info_clicked(self, btn: Gtk.Button) -> None:
+        self._prefs_dialog.present(self)
 
     def _on_close_request(self, window: object) -> bool:
         logger.info("Window close requested — quitting application.")

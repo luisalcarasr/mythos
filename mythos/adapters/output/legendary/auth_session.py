@@ -1,57 +1,41 @@
-# Mythos — Epic Games Launcher
-# Copyright (C) 2024 Luis Alcaras <luisalcarasr@gmail.com>
-# SPDX-License-Identifier: GPL-3.0-or-later
-"""AuthSessionRepository implemented via LegendaryCore."""
-
 from __future__ import annotations
 
+import json
 import logging
+from pathlib import Path
 from typing import Optional
 
-from mythos.adapters.output.legendary.core_gateway import LegendaryCoreGateway
-from mythos.domain.exceptions import AuthenticationError, SessionExpiredError
+from mythos.adapters.output.legendary.cli_wrapper import LegendaryCliWrapper
+from mythos.domain.exceptions import AuthenticationError
 from mythos.ports.output import AuthSessionRepository
 
 logger = logging.getLogger(__name__)
 
+_USER_JSON_PATH = Path.home() / ".config" / "legendary" / "user.json"
+
 
 class LegendaryAuthSession(AuthSessionRepository):
-    """
-    Delegates authentication to LegendaryCore.
-
-    legendary stores its own session tokens in
-    ``~/.config/legendary/user.json`` (or OS equivalent).
-    """
-
-    def __init__(self, gateway: LegendaryCoreGateway) -> None:
-        self._gw = gateway
+    def __init__(self, cli: Optional[LegendaryCliWrapper] = None) -> None:
+        self._cli = cli or LegendaryCliWrapper()
 
     def login_with_code(self, authorization_code: str) -> dict:
-        """
-        Exchange an Epic authorisation code for a session.
-
-        legendary's ``auth_code()`` method does the OAuth exchange and
-        persists the token automatically.  It returns ``False`` (instead
-        of raising) when Epic rejects the code, so we must check the
-        return value explicitly.
-        """
         try:
-            success = self._gw.core.auth_code(authorization_code)
+            self._cli.run(["auth", "--code", authorization_code])
         except Exception as exc:
             raise AuthenticationError(f"Login failed: {exc}") from exc
 
-        if not success:
+        session = self._build_session_dict()
+        if not session:
             raise AuthenticationError(
                 "Epic rejected the authorisation code. "
                 "The code may have already been used or has expired — "
                 "please open the login page again and use the new code."
             )
-
-        return self._build_session_dict()
+        return session
 
     def logout(self) -> None:
         try:
-            self._gw.core.logout()
+            self._cli.run(["auth", "--delete"])
         except Exception as exc:
             logger.warning("Logout error (ignored): %s", exc)
 
@@ -61,22 +45,24 @@ class LegendaryAuthSession(AuthSessionRepository):
         return self._build_session_dict()
 
     def is_logged_in(self) -> bool:
+        if not _USER_JSON_PATH.exists():
+            return False
         try:
-            return bool(self._gw.core.login())
-        except Exception:  # noqa: BLE001
+            data = json.loads(_USER_JSON_PATH.read_text())
+            return bool(data.get("access_token"))
+        except Exception:
             return False
 
-    def _build_session_dict(self) -> dict:
+    def _build_session_dict(self) -> Optional[dict]:
         try:
-            ud = self._gw.core.lgd.userdata
-            if ud is None:
-                raise AuthenticationError("Session data is empty after login.")
+            if not _USER_JSON_PATH.exists():
+                return None
+            ud = json.loads(_USER_JSON_PATH.read_text())
             return {
                 "display_name": ud.get("displayName", ""),
                 "account_id": ud.get("account_id", ""),
                 "access_token": ud.get("access_token", ""),
             }
-        except AuthenticationError:
-            raise
         except Exception as exc:
-            raise AuthenticationError(f"Could not read session data: {exc}") from exc
+            logger.error("Could not read session data: %s", exc)
+            return None

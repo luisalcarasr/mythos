@@ -124,7 +124,18 @@ def main() -> int:
         from mythos.config.container import build
         container = build()
 
-    # 4. GTK application
+    # 4. Check legendary CLI
+    if not fake_mode:
+        import shutil
+        if not shutil.which("legendary"):
+            logger.critical(
+                "legendary CLI not found. Install it with:\n"
+                "  pip install legendary-gl\n"
+                "or via your system package manager."
+            )
+            return 1
+
+    # 5. GTK application
     try:
         import gi  # noqa: F401
     except ImportError:

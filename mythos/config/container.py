@@ -1,17 +1,3 @@
-# Mythos — Epic Games Launcher
-# Copyright (C) 2024 Luis Alcaras <luisalcarasr@gmail.com>
-# SPDX-License-Identifier: GPL-3.0-or-later
-"""
-Composition Root — the single place that knows about concrete adapter classes.
-
-All other layers (domain, ports, application) remain unaware of which
-adapter implementations are in use.  Only this module imports from
-``adapters.output.*``.
-
-The ``Container`` is built once in ``__main__.py`` and passed to the GTK
-application, which distributes individual use-case instances to views.
-"""
-
 from __future__ import annotations
 
 import logging
@@ -22,19 +8,6 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class Container:
-    """
-    Dependency injection container wired at startup.
-
-    Attributes are populated by ``build()`` in the correct order:
-        1. Driven adapters (output ports)
-        2. Use cases (application layer)
-        3. Nothing from the UI layer — views pull what they need via the
-           container reference passed to the GTK Application.
-    """
-
-    # ------------------------------------------------------------------ #
-    # Driven adapters (output ports)                                       #
-    # ------------------------------------------------------------------ #
     epic_store: object = field(default=None, repr=False)
     auth_session_repo: object = field(default=None, repr=False)
     installed_library_repo: object = field(default=None, repr=False)
@@ -45,9 +18,6 @@ class Container:
     download_queue_port: object = field(default=None, repr=False)
     event_bus: object = field(default=None, repr=False)
 
-    # ------------------------------------------------------------------ #
-    # Use cases (application layer)                                        #
-    # ------------------------------------------------------------------ #
     login_use_case: object = field(default=None, repr=False)
     logout_use_case: object = field(default=None, repr=False)
     get_session_use_case: object = field(default=None, repr=False)
@@ -70,18 +40,11 @@ class Container:
 
 
 def build() -> Container:
-    """
-    Instantiate all adapters and use cases and return a fully-wired
-    ``Container``.
-
-    Import order matters — output adapters first, then use cases that
-    depend on them.
-    """
     from mythos.adapters.output.legendary.epic_store import LegendaryEpicStore
     from mythos.adapters.output.legendary.auth_session import LegendaryAuthSession
     from mythos.adapters.output.legendary.installed_repo import LegendaryInstalledRepo
     from mythos.adapters.output.legendary.cloud_saves import LegendaryCloudSaves
-    from mythos.adapters.output.legendary.core_gateway import LegendaryCoreGateway
+    from mythos.adapters.output.legendary.cli_wrapper import LegendaryCliWrapper
     from mythos.adapters.output.umu.wine_adapter import UmuWineAdapter
     from mythos.adapters.output.storage.image_cache import DiskImageCache
     from mythos.adapters.output.storage.settings_json import JsonSettingsRepository
@@ -98,30 +61,31 @@ def build() -> Container:
         UninstallGame,
     )
     from mythos.application.launch import LaunchGame
-    from mythos.application.downloads import EnqueueDownload, CancelDownload, PauseDownload, ResumeDownload
+    from mythos.application.downloads import (
+        EnqueueDownload,
+        CancelDownload,
+        PauseDownload,
+        ResumeDownload,
+    )
     from mythos.application.saves import SyncSaves
     from mythos.application.settings import GetSettings, UpdateSettings
     from mythos.application.game_proton import SetGameProton
 
     logger.info("Building dependency container…")
 
-    # -- Shared legendary gateway ----------------------------------------
-    gateway = LegendaryCoreGateway()
-
-    # -- Driven adapters -------------------------------------------------
+    cli = LegendaryCliWrapper()
     event_bus = GLibEventBus()
     runner = SubprocessRunner(event_bus=event_bus)
 
-    epic_store = LegendaryEpicStore(gateway=gateway, runner=runner)
-    auth_session_repo = LegendaryAuthSession(gateway=gateway)
-    installed_library_repo = LegendaryInstalledRepo(gateway=gateway)
-    cloud_save_port = LegendaryCloudSaves(gateway=gateway)
+    epic_store = LegendaryEpicStore(cli=cli)
+    auth_session_repo = LegendaryAuthSession(cli=cli)
+    installed_library_repo = LegendaryInstalledRepo(cli=cli)
+    cloud_save_port = LegendaryCloudSaves(cli=cli)
     wine_runtime_port = UmuWineAdapter(runner=runner, event_bus=event_bus)
     image_cache_port = DiskImageCache()
     settings_repo = JsonSettingsRepository()
-    download_queue_port = epic_store  # EpicStore doubles as queue backend
+    download_queue_port = epic_store
 
-    # -- Use cases -------------------------------------------------------
     login_uc = Login(auth_session_repo=auth_session_repo)
     logout_uc = Logout(auth_session_repo=auth_session_repo)
     get_session_uc = GetSession(auth_session_repo=auth_session_repo)

@@ -76,12 +76,18 @@
 /* Game settings dialog — wide cover image                             */
 /* ------------------------------------------------------------------ */
 
+.game-dialog-cover-group,
+.game-dialog-cover-group > box {
+    padding: 0;
+    margin: 0;
+}
+
 .game-dialog-cover-frame {
     border-radius: 12px;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
-    /* clip child (picture) to the frame's rounded corners */
     overflow: hidden;
     border: none;
+    margin: 0;
 }
 
 .game-dialog-cover {

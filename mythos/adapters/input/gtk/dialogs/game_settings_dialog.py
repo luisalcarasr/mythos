@@ -121,17 +121,12 @@ class GameSettingsDialog(Adw.PreferencesDialog):
             picture.set_hexpand(True)
             picture.add_css_class("game-dialog-cover")
 
-            # Clamp to dialog width with rounded corners via CSS clip
             cover_frame = Gtk.Frame()
             cover_frame.set_child(picture)
-            cover_frame.set_margin_start(16)
-            cover_frame.set_margin_end(16)
-            cover_frame.set_margin_top(16)
-            cover_frame.set_margin_bottom(8)
             cover_frame.add_css_class("game-dialog-cover-frame")
 
             cover_group = Adw.PreferencesGroup()
-            cover_group.set_header_suffix(Gtk.Label())  # suppress default header spacing
+            cover_group.add_css_class("game-dialog-cover-group")
             cover_group.add(cover_frame)
             page.add(cover_group)
 

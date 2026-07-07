@@ -69,7 +69,7 @@ class GameCard(Gtk.FlowBoxChild):
         settings_btn.set_valign(Gtk.Align.START)
         settings_btn.set_margin_top(6)
         settings_btn.set_margin_end(6)
-        settings_btn.connect("clicked", lambda *_: self._ctx_menu.show_at(settings_btn))
+        settings_btn.connect("clicked", self._on_settings_clicked)
         img_overlay.add_overlay(settings_btn)
 
         motion = Gtk.EventControllerMotion()
@@ -151,6 +151,11 @@ class GameCard(Gtk.FlowBoxChild):
             self._action_btn.set_visible(False)
 
         self._action_btn.connect("clicked", self._on_action_clicked)
+
+    def _on_settings_clicked(self, btn: Gtk.Button) -> None:
+        from mythos.adapters.input.gtk.dialogs.game_settings_dialog import GameSettingsDialog
+        dialog = GameSettingsDialog(self._vm)
+        dialog.present(self.get_root())
 
     def _on_action_clicked(self, _btn: Gtk.Button) -> None:
         status = self._vm.status

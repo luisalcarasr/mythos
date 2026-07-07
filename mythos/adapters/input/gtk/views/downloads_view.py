@@ -122,6 +122,7 @@ class DownloadsView(Gtk.Box):
         self._stack = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
         self._stack.set_margin_start(16)
         self._stack.set_margin_end(16)
+        self._stack.set_valign(Gtk.Align.START)
         clamp.set_child(self._stack)
 
         self._empty = Adw.StatusPage()

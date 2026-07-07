@@ -65,6 +65,8 @@ class DownloadCard(Gtk.Box):
         self._on_cancel = on_cancel
         self._paused = vm.is_paused
 
+        self.set_valign(Gtk.Align.START)
+        self.set_vexpand(False)
         self.add_css_class("download-card")
         self._build()
 

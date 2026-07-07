@@ -119,6 +119,10 @@ def build_fake() -> Container:
     move_uc = MoveGame(epic_store=epic_store, event_bus=event_bus)
     uninstall_uc = UninstallGame(epic_store=epic_store, event_bus=event_bus)
 
+    list_proton_uc = ListProtonVersions(runner_manager=runner_manager)
+    install_proton_uc = InstallProton(runner_manager=runner_manager, event_bus=event_bus)
+    set_game_proton_uc = SetGameProton(installed_repo=installed_library_repo)
+
     launch_uc = LaunchGame(
         epic_store=epic_store,
         wine_runtime=wine_runtime_port,
@@ -143,10 +147,6 @@ def build_fake() -> Container:
 
     get_settings_uc = GetSettings(settings_repo=settings_repo)
     update_settings_uc = UpdateSettings(settings_repo=settings_repo)
-
-    list_proton_uc = ListProtonVersions(runner_manager=runner_manager)
-    install_proton_uc = InstallProton(runner_manager=runner_manager, event_bus=event_bus)
-    set_game_proton_uc = SetGameProton(installed_repo=installed_library_repo)
 
     logger.info("Fake container ready — %d demo games loaded.", len(games))
 

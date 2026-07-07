@@ -67,6 +67,7 @@ class DownloadCard(Gtk.Box):
 
         self.set_valign(Gtk.Align.START)
         self.set_vexpand(False)
+        self.set_vexpand_set(True)
         self.add_css_class("download-card")
         self._build()
 
@@ -80,6 +81,8 @@ class DownloadCard(Gtk.Box):
         self._thumb.set_size_request(_THUMB_SIZE, _THUMB_SIZE)
         self._thumb.set_halign(Gtk.Align.START)
         self._thumb.set_valign(Gtk.Align.CENTER)
+        self._thumb.set_vexpand(False)
+        self._thumb.set_vexpand_set(True)
         self._thumb.add_css_class("download-card-thumb")
 
         if self._vm.is_runner or self._vm.thumbnail_path is None:
@@ -87,8 +90,6 @@ class DownloadCard(Gtk.Box):
             icon.set_pixel_size(40)
             icon.set_halign(Gtk.Align.CENTER)
             icon.set_valign(Gtk.Align.CENTER)
-            icon.set_hexpand(True)
-            icon.set_vexpand(True)
             self._thumb.append(icon)
         else:
             picture = Gtk.Picture()

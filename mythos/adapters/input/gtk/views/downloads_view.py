@@ -115,6 +115,7 @@ class DownloadsView(Gtk.Box):
         # Clamp content to a reasonable max-width
         clamp = Adw.Clamp()
         clamp.set_maximum_size(1080)
+        clamp.set_valign(Gtk.Align.START)
         clamp.set_margin_top(16)
         clamp.set_margin_bottom(16)
         scrolled.set_child(clamp)
@@ -123,6 +124,8 @@ class DownloadsView(Gtk.Box):
         self._stack.set_margin_start(16)
         self._stack.set_margin_end(16)
         self._stack.set_valign(Gtk.Align.START)
+        self._stack.set_vexpand(False)
+        self._stack.set_vexpand_set(True)
         clamp.set_child(self._stack)
 
         self._empty = Adw.StatusPage()

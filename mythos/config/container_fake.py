@@ -1,20 +1,3 @@
-# Mythos — Epic Games Launcher
-# Copyright (C) 2024 Luis Alcaras <luisalcarasr@gmail.com>
-# SPDX-License-Identifier: GPL-3.0-or-later
-"""
-Fake composition root for design / UI-development mode.
-
-``build_fake()`` mirrors ``build()`` in container.py but wires every
-output port with an in-memory fake seeded with realistic demo data.
-The real application-layer use cases (mythos/application/*) are wired
-unchanged so the full business logic is exercised — only the external
-adapters (Legendary, umu, disk, network) are replaced.
-
-Activate with:
-    MYTHOS_FAKE=1 uv run python -m mythos
-    uv run python -m mythos --fake
-"""
-
 from __future__ import annotations
 
 import logging
@@ -25,32 +8,23 @@ logger = logging.getLogger(__name__)
 
 
 def build_fake() -> Container:
-    """
-    Instantiate all fake adapters, seed them with demo data, wire the
-    real use cases, and return a fully-populated ``Container``.
-    """
-    # -- Fakes --------------------------------------------------------- #
     from mythos.adapters.output.fakes.fake_auth import FakeAuthSession
     from mythos.adapters.output.fakes.fake_cloud_saves import FakeCloudSaves
-    from mythos.adapters.output.fakes.fake_download_queue import FakeDownloadQueue
     from mythos.adapters.output.fakes.fake_epic_store import FakeEpicStore
     from mythos.adapters.output.fakes.fake_event_bus import FakeEventBus
     from mythos.adapters.output.fakes.fake_image_cache import FakeImageCache
     from mythos.adapters.output.fakes.fake_installed_repo import FakeInstalledRepo
     from mythos.adapters.output.fakes.fake_settings_repo import FakeSettingsRepo
     from mythos.adapters.output.fakes.fake_wine_runtime import FakeWineRuntime
+    from mythos.adapters.output.umu.database import UmuDatabase
 
-    # -- Demo data ----------------------------------------------------- #
     from mythos.adapters.output.fakes.demo_data import (
-        demo_download_tasks,
         demo_games,
         demo_installed,
         demo_settings,
     )
 
-    # -- Use cases (real) ---------------------------------------------- #
     from mythos.application.auth import GetSession, Login, Logout
-    from mythos.application.downloads import CancelDownload, EnqueueDownload, PauseDownload, ResumeDownload
     from mythos.application.install import (
         InstallGame,
         MoveGame,
@@ -66,13 +40,10 @@ def build_fake() -> Container:
 
     logger.info("Building FAKE dependency container (design mode)…")
 
-    # -- Seed data ------------------------------------------------------- #
     games = demo_games()
     installed = demo_installed()
-    tasks = demo_download_tasks()
     settings = demo_settings()
 
-    # -- Output adapters ------------------------------------------------- #
     event_bus = FakeEventBus()
 
     auth_session_repo = FakeAuthSession(logged_in=True)
@@ -82,14 +53,12 @@ def build_fake() -> Container:
     cloud_save_port = FakeCloudSaves()
     wine_runtime_port = FakeWineRuntime()
     settings_repo = FakeSettingsRepo(settings=settings)
-    download_queue_port = FakeDownloadQueue(initial=tasks)
+    umu_database_port = UmuDatabase(cache_dir="/tmp/mythos-fake-umu")
 
-    # Pre-render cover art for every demo game (fast, avoids first-frame lag)
     image_cache_port = FakeImageCache()
     for game in games:
         image_cache_port.preload(game.app_name, game.title)
 
-    # -- Use cases ------------------------------------------------------- #
     login_uc = Login(auth_session_repo=auth_session_repo, event_bus=event_bus)
     logout_uc = Logout(auth_session_repo=auth_session_repo, event_bus=event_bus)
     get_session_uc = GetSession(auth_session_repo=auth_session_repo)
@@ -110,9 +79,18 @@ def build_fake() -> Container:
         epic_store=epic_store,
         settings_repo=settings_repo,
         event_bus=event_bus,
+        umu_database=umu_database_port,
     )
-    update_uc = UpdateGame(epic_store=epic_store, event_bus=event_bus)
-    repair_uc = RepairGame(epic_store=epic_store, event_bus=event_bus)
+    update_uc = UpdateGame(
+        epic_store=epic_store,
+        event_bus=event_bus,
+        umu_database=umu_database_port,
+    )
+    repair_uc = RepairGame(
+        epic_store=epic_store,
+        event_bus=event_bus,
+        umu_database=umu_database_port,
+    )
     move_uc = MoveGame(epic_store=epic_store, event_bus=event_bus)
     uninstall_uc = UninstallGame(epic_store=epic_store, event_bus=event_bus)
 
@@ -124,16 +102,8 @@ def build_fake() -> Container:
         installed_repo=installed_library_repo,
         settings_repo=settings_repo,
         event_bus=event_bus,
+        umu_database=umu_database_port,
     )
-
-    enqueue_uc = EnqueueDownload(
-        install_use_case=install_uc,
-        update_use_case=update_uc,
-        event_bus=event_bus,
-    )
-    cancel_uc = CancelDownload(epic_store=epic_store, event_bus=event_bus)
-    pause_uc = PauseDownload(queue=download_queue_port, event_bus=event_bus)
-    resume_uc = ResumeDownload(queue=download_queue_port, event_bus=event_bus)
 
     sync_saves_uc = SyncSaves(
         cloud_save_port=cloud_save_port,
@@ -154,8 +124,8 @@ def build_fake() -> Container:
         wine_runtime_port=wine_runtime_port,
         image_cache_port=image_cache_port,
         settings_repo=settings_repo,
-        download_queue_port=download_queue_port,
         event_bus=event_bus,
+        umu_database_port=umu_database_port,
         login_use_case=login_uc,
         logout_use_case=logout_uc,
         get_session_use_case=get_session_uc,
@@ -167,10 +137,6 @@ def build_fake() -> Container:
         move_game_use_case=move_uc,
         uninstall_game_use_case=uninstall_uc,
         launch_game_use_case=launch_uc,
-        enqueue_download_use_case=enqueue_uc,
-        cancel_download_use_case=cancel_uc,
-        pause_download_use_case=pause_uc,
-        resume_download_use_case=resume_uc,
         sync_saves_use_case=sync_saves_uc,
         get_settings_use_case=get_settings_uc,
         update_settings_use_case=update_settings_uc,

@@ -241,6 +241,15 @@ class GameSettingsDialog(Adw.PreferencesDialog):
     def _actions_group(self) -> Adw.PreferencesGroup:
         group = Adw.PreferencesGroup(title="Actions")
 
+        repair_row = Adw.ActionRow(title="Repair")
+        repair_row.set_subtitle("Verify and repair game file integrity")
+        repair_btn = Gtk.Button(label="Repair")
+        repair_btn.add_css_class("flat")
+        repair_btn.connect("clicked", self._on_repair)
+        repair_row.add_suffix(repair_btn)
+        repair_row.set_activatable_widget(repair_btn)
+        group.add(repair_row)
+
         verify_row = Adw.ActionRow(title="Verify Files")
         verify_row.set_subtitle("Check game file integrity and repair any issues")
         verify_btn = Gtk.Button(label="Verify")
@@ -273,8 +282,64 @@ class GameSettingsDialog(Adw.PreferencesDialog):
         if self._vm.install_path:
             Gtk.show_uri(None, f"file://{self._vm.install_path}", Gdk.CURRENT_TIME)
 
+    def _on_repair(self, _btn: Gtk.Button) -> None:
+        logger.info("Repair requested for %s", self._vm.app_name)
+        from mythos.domain.value_objects import AppName
+
+        def _work() -> None:
+            try:
+                self._c.repair_game_use_case.execute(
+                    AppName(self._vm.app_name), title=self._vm.title
+                )
+            except Exception as exc:
+                logger.error("Repair failed for %s: %s", self._vm.app_name, exc)
+
+        threading.Thread(target=_work, daemon=True).start()
+        self.close()
+
     def _on_verify(self, _btn: Gtk.Button) -> None:
         logger.info("Verify requested for %s", self._vm.app_name)
+        from mythos.domain.value_objects import AppName
+
+        def _work() -> None:
+            try:
+                self._c.repair_game_use_case.execute(
+                    AppName(self._vm.app_name), title=self._vm.title
+                )
+            except Exception as exc:
+                logger.error("Verify failed for %s: %s", self._vm.app_name, exc)
+
+        threading.Thread(target=_work, daemon=True).start()
+        self.close()
 
     def _on_uninstall(self, _btn: Gtk.Button) -> None:
         logger.info("Uninstall requested for %s", self._vm.app_name)
+
+        dialog = Adw.AlertDialog(
+            heading=f"Uninstall {self._vm.title}?",
+            body="This will remove the game from your system. This action cannot be undone.",
+        )
+        dialog.add_response("cancel", "Cancel")
+        dialog.add_response("uninstall", "Uninstall")
+        dialog.set_response_appearance("uninstall", Adw.ResponseAppearance.DESTRUCTIVE)
+        dialog.set_default_response("cancel")
+        dialog.set_close_response("cancel")
+
+        def on_response(alert: Adw.AlertDialog, response: str) -> None:
+            if response == "uninstall":
+                self._do_uninstall()
+
+        dialog.connect("response", on_response)
+        dialog.present(self)
+
+    def _do_uninstall(self) -> None:
+        from mythos.domain.value_objects import AppName
+
+        def _work() -> None:
+            try:
+                self._c.uninstall_game_use_case.execute(AppName(self._vm.app_name))
+            except Exception as exc:
+                logger.error("Uninstall failed for %s: %s", self._vm.app_name, exc)
+
+        threading.Thread(target=_work, daemon=True).start()
+        self.close()

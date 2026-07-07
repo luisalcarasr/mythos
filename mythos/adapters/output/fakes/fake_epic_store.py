@@ -51,9 +51,6 @@ class FakeEpicStore(EpicStorePort):
         self.update_calls: list[AppName] = []
         self.uninstall_calls: list[AppName] = []
         self.launch_calls: list[AppName] = []
-        self.cancel_calls: list[AppName] = []
-        self.pause_calls: list[AppName] = []
-        self.resume_calls: list[AppName] = []
 
     # ---------------------------------------------------------------- #
     # EpicStorePort                                                      #
@@ -141,15 +138,6 @@ class FakeEpicStore(EpicStorePort):
         if app_name in self._games:
             self._games[app_name].installed_info = None
             self._games[app_name].status = GameStatus.NOT_INSTALLED
-
-    def cancel_download(self, app_name: AppName) -> None:
-        self.cancel_calls.append(app_name)
-
-    def pause_download(self, app_name: AppName) -> None:
-        self.pause_calls.append(app_name)
-
-    def resume_download(self, app_name: AppName) -> None:
-        self.resume_calls.append(app_name)
 
     def get_installed(self) -> list[InstalledInfo]:
         return list(self._installed.values())

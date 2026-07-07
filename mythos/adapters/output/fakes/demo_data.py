@@ -16,15 +16,13 @@ interesting ``GameStatus`` so every UI state is visible immediately:
   - Error state
 
 ``demo_installed()`` returns the matching ``InstalledInfo`` list.
-``demo_download_tasks()`` returns tasks for the Downloads view.
 """
 
 from __future__ import annotations
 
-import uuid
 from pathlib import Path
 
-from mythos.domain.entities import AppSettings, DownloadTask, Game, InstalledInfo
+from mythos.domain.entities import AppSettings, Game, InstalledInfo
 from mythos.domain.value_objects import (
     AppName,
     DiskSize,
@@ -32,7 +30,6 @@ from mythos.domain.value_objects import (
     InstallPath,
     LaunchOptions,
     Platform,
-    Progress,
     WineRunnerType,
 )
 
@@ -246,34 +243,6 @@ def demo_installed() -> list[InstalledInfo]:
         if game.installed_info is not None:
             result.append(game.installed_info)
     return result
-
-
-def demo_download_tasks() -> list[DownloadTask]:
-    """Return a mix of tasks for the Downloads view."""
-    return [
-        DownloadTask(
-            id=str(uuid.uuid4()),
-            app_name=_name("AlanWake2"),
-            title="Alan Wake 2",
-            kind="install",
-            progress=Progress(
-                fraction=0.42,
-                downloaded_bytes=int(0.42 * 65 * 1024 ** 3),
-                total_bytes=int(65 * 1024 ** 3),
-                speed_bps=80 * 1024 * 1024,
-                eta_seconds=450,
-            ),
-            status=GameStatus.INSTALLING,
-        ),
-        DownloadTask(
-            id=str(uuid.uuid4()),
-            app_name=_name("CyberPunk2077"),
-            title="Cyberpunk 2077",
-            kind="update",
-            progress=Progress(fraction=0.0),
-            status=GameStatus.QUEUED,
-        ),
-    ]
 
 
 def demo_settings() -> AppSettings:

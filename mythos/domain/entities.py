@@ -12,7 +12,6 @@ Rules:
 
 from __future__ import annotations
 
-import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -34,10 +33,6 @@ from mythos.domain.events import (
     GameUninstalled,
     GameLaunched,
     GameStopped,
-    DownloadProgressed,
-    DownloadCompleted,
-    DownloadCancelled,
-    DownloadFailed,
 )
 from mythos.domain.exceptions import (
     GameAlreadyInstalledError,
@@ -208,76 +203,6 @@ class InstalledInfo:
     @property
     def is_running(self) -> bool:
         return self.pid is not None
-
-
-# ------------------------------------------------------------------ #
-# DownloadTask                                                         #
-# ------------------------------------------------------------------ #
-
-
-@dataclass
-class DownloadTask:
-    """
-    Represents a queued or active installation / update download.
-
-    The queue is managed by the ``DownloadQueuePort``; this entity
-    tracks the in-memory state of a single task.
-    """
-    id: str = field(default_factory=lambda: str(uuid.uuid4()))
-    app_name: AppName = field(default_factory=lambda: AppName("unknown"))
-    title: str = ""
-    kind: str = "install"   # "install" | "update" | "repair"
-    progress: Progress = field(default_factory=Progress)
-    status: GameStatus = GameStatus.QUEUED
-    error_message: str = ""
-
-    _pending_events: list[DomainEvent] = field(
-        default_factory=list, repr=False, compare=False
-    )
-
-    # ---------------------------------------------------------------- #
-    # Business rules                                                     #
-    # ---------------------------------------------------------------- #
-
-    def update_progress(self, progress: Progress) -> None:
-        self.progress = progress
-        self.status = GameStatus.INSTALLING
-        self._pending_events.append(
-            DownloadProgressed(
-                task_id=self.id,
-                app_name=str(self.app_name),
-                progress=progress,
-            )
-        )
-
-    def mark_complete(self) -> None:
-        self.progress = Progress(fraction=1.0)
-        self.status = GameStatus.INSTALLED
-        self._pending_events.append(
-            DownloadCompleted(task_id=self.id, app_name=str(self.app_name))
-        )
-
-    def mark_cancelled(self) -> None:
-        self.status = GameStatus.NOT_INSTALLED
-        self._pending_events.append(
-            DownloadCancelled(task_id=self.id, app_name=str(self.app_name))
-        )
-
-    def mark_failed(self, reason: str) -> None:
-        self.status = GameStatus.ERROR
-        self.error_message = reason
-        self._pending_events.append(
-            DownloadFailed(
-                task_id=self.id,
-                app_name=str(self.app_name),
-                reason=reason,
-            )
-        )
-
-    def collect_events(self) -> list[DomainEvent]:
-        events = list(self._pending_events)
-        self._pending_events.clear()
-        return events
 
 
 # ------------------------------------------------------------------ #

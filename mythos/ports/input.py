@@ -20,7 +20,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Optional
 
-from mythos.domain.entities import AppSettings, DownloadTask, Game, InstalledInfo
+from mythos.domain.entities import AppSettings, Game, InstalledInfo
 from mythos.domain.value_objects import AppName, LaunchOptions, Platform, SyncDirection, WineRunnerType
 
 
@@ -88,6 +88,7 @@ class InstallGameUseCase(ABC):
         app_name: AppName,
         install_path: Optional[Path] = None,
         platform: Optional[Platform] = None,
+        title: str = "",
     ) -> InstalledInfo:
         """
         Install *app_name*.
@@ -103,13 +104,13 @@ class InstallGameUseCase(ABC):
 
 class UpdateGameUseCase(ABC):
     @abstractmethod
-    def execute(self, app_name: AppName) -> InstalledInfo:
+    def execute(self, app_name: AppName, title: str = "") -> InstalledInfo:
         """Download and apply the latest update for *app_name*."""
 
 
 class RepairGameUseCase(ABC):
     @abstractmethod
-    def execute(self, app_name: AppName) -> InstalledInfo:
+    def execute(self, app_name: AppName, title: str = "") -> InstalledInfo:
         """Verify files and re-download any that are missing or corrupt."""
 
 
@@ -144,46 +145,6 @@ class LaunchGameUseCase(ABC):
         Publishes ``GameLaunched`` on success; ``GameStopped`` when the
         process exits.
         """
-
-
-# ------------------------------------------------------------------ #
-# Downloads                                                            #
-# ------------------------------------------------------------------ #
-
-
-class EnqueueDownloadUseCase(ABC):
-    @abstractmethod
-    def execute(
-        self,
-        app_name: AppName,
-        kind: str = "install",
-        install_path: Optional[Path] = None,
-        platform: Optional[Platform] = None,
-    ) -> DownloadTask:
-        """
-        Add a download task for *app_name* to the queue.
-
-        ``kind`` is one of ``"install"``, ``"update"``, ``"repair"``.
-        Publishes ``DownloadEnqueued``.
-        """
-
-
-class CancelDownloadUseCase(ABC):
-    @abstractmethod
-    def execute(self, task_id: str) -> None:
-        """Abort the task identified by *task_id* and remove it from the queue."""
-
-
-class PauseDownloadUseCase(ABC):
-    @abstractmethod
-    def execute(self, task_id: str) -> None:
-        """Pause the task identified by *task_id*. Publishes ``DownloadPaused``."""
-
-
-class ResumeDownloadUseCase(ABC):
-    @abstractmethod
-    def execute(self, task_id: str) -> None:
-        """Resume a paused task. Publishes ``DownloadResumed``."""
 
 
 # ------------------------------------------------------------------ #

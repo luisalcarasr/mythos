@@ -3,7 +3,6 @@
 from mythos.adapters.output.fakes import (  # noqa: F401
     FakeAuthSession,
     FakeCloudSaves,
-    FakeDownloadQueue,
     FakeEpicStore,
     FakeEventBus,
     FakeImageCache,

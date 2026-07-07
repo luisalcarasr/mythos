@@ -17,8 +17,10 @@ Bootstraps:
 
 from __future__ import annotations
 
+import atexit
 import logging
 import os
+import signal
 import sys
 
 
@@ -107,6 +109,17 @@ def main() -> int:
     from mythos.config.paths import AppPaths
     AppPaths.ensure_all()
 
+    # 1b. Cleanup orphaned legendary processes from previous sessions
+    #     and register exit handler for current session.
+    from mythos.adapters.output.legendary.process_manager import LegendaryProcessManager
+    LegendaryProcessManager.cleanup()
+
+    def _cleanup_legendary() -> None:
+        LegendaryProcessManager.cleanup()
+
+    atexit.register(_cleanup_legendary)
+    signal.signal(signal.SIGTERM, lambda *_: (_cleanup_legendary(), sys.exit(0)))
+
     # 2. i18n
     from mythos.config.i18n import setup as i18n_setup, get_system_language
     i18n_setup(get_system_language())
@@ -123,6 +136,14 @@ def main() -> int:
     else:
         from mythos.config.container import build
         container = build()
+
+    # 3b. Background refresh of UMU database (debounced, does not block startup)
+    import threading
+    threading.Thread(
+        target=container.umu_database_port.refresh,
+        daemon=True,
+        name="umu-db-refresh",
+    ).start()
 
     # 4. Check legendary CLI
     if not fake_mode:

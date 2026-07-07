@@ -9,9 +9,11 @@ import logging
 from pathlib import Path
 from typing import Optional
 
+from mythos.domain.entities import Game
 from mythos.domain.events import GameLaunched, GameStopped
 from mythos.domain.value_objects import AppName, LaunchOptions, WineRunnerType
 from mythos.ports.input import LaunchGameUseCase
+from mythos.adapters.output.umu.database import UmuDatabase
 from mythos.ports.output import EpicStorePort, EventBus, InstalledLibraryRepository, SettingsRepository, WineRuntimePort
 
 logger = logging.getLogger(__name__)
@@ -36,12 +38,14 @@ class LaunchGame(LaunchGameUseCase):
         installed_repo: Optional[InstalledLibraryRepository] = None,
         settings_repo: Optional[SettingsRepository] = None,
         event_bus: Optional[EventBus] = None,
+        umu_database: Optional[UmuDatabase] = None,
     ) -> None:
         self._wine = wine_runtime
         self._store = epic_store
         self._installed_repo = installed_repo
         self._settings = settings_repo
         self._bus = event_bus
+        self._umu_db = umu_database
 
     def execute(
         self,
@@ -72,13 +76,29 @@ class LaunchGame(LaunchGameUseCase):
         if effective_options and effective_options.extra_env:
             extra_env = dict(effective_options.extra_env)
 
+        game_title = str(app_name)
+        if self._store:
+            try:
+                game: Game | None = self._store.get_game(app_name)
+                if game:
+                    game_title = game.title.value
+            except Exception:
+                pass
+
+        umu_id = None
+        if self._umu_db:
+            umu_id = self._umu_db.lookup("egs", str(app_name))
+            if not umu_id:
+                umu_id = self._umu_db.fuzzy_search(game_title, store="egs")
+        game_id = umu_id.umu_id if umu_id else "umu-default"
+
         pid = self._wine.execute_game(
             executable=exe,
             args=launch_args,
             wine_runner=effective_options.wine_runner if effective_options else WineRunnerType.NONE,
             wineprefix=wineprefix,
             env=extra_env,
-            game_id=f"umu-{app_name}",
+            game_id=game_id,
             store="egs",
             on_exit=lambda code: self._on_game_exited(app_name, code),
         )

@@ -10,9 +10,7 @@ Layout:
       ├── Adw.HeaderBar (top)
       │   ├── [start] refresh button
       │   └── [end]   info/settings button → Adw.PreferencesDialog
-      └── Adw.ViewStack (content)
-          ├── "library"   → LibraryView
-          └── "downloads" → DownloadsView
+      └── LibraryView (single page with inline download progress)
 
 Settings are no longer a navigation tab.  They open as a modal
 ``Adw.PreferencesDialog`` from the info button (⋮ / gear) in the
@@ -31,12 +29,9 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, GLib, Gtk  # noqa: E402
 
 from mythos.config.container import Container  # noqa: E402
-from mythos.domain.events import UserLoggedIn, UserLoggedOut  # noqa: E402
+from mythos.domain.events import UserLoggedOut  # noqa: E402
 
 logger = logging.getLogger(__name__)
-
-_ICON_LIBRARY = "view-grid-symbolic"
-_ICON_DOWNLOADS = "folder-download-symbolic"
 
 
 class MythosWindow(Adw.ApplicationWindow):
@@ -64,62 +59,41 @@ class MythosWindow(Adw.ApplicationWindow):
         self.set_content(toolbar_view)
 
         # Header bar
-        self._header = Adw.HeaderBar()
-        toolbar_view.add_top_bar(self._header)
-
-        # View switcher (library / downloads only — settings moved to dialog)
-        self._view_stack = Adw.ViewStack()
-        self._view_switcher = Adw.ViewSwitcher(
-            stack=self._view_stack, policy=Adw.ViewSwitcherPolicy.WIDE
-        )
-        self._header.set_title_widget(self._view_switcher)
+        header = Adw.HeaderBar()
+        toolbar_view.add_top_bar(header)
 
         # [start] Refresh button
         self._btn_refresh = Gtk.Button(icon_name="view-refresh-symbolic")
         self._btn_refresh.set_tooltip_text("Refresh library")
         self._btn_refresh.connect("clicked", self._on_refresh_clicked)
-        self._header.pack_start(self._btn_refresh)
+        header.pack_start(self._btn_refresh)
 
         # [end] Info / settings button
         self._btn_info = Gtk.Button(icon_name="preferences-system-symbolic")
         self._btn_info.set_tooltip_text("Preferences")
         self._btn_info.connect("clicked", self._on_info_clicked)
-        self._header.pack_end(self._btn_info)
+        header.pack_end(self._btn_info)
 
-        toolbar_view.set_content(self._view_stack)
-
-        # Bottom switcher bar (for narrow widths)
-        self._switcher_bar = Adw.ViewSwitcherBar(stack=self._view_stack)
-        toolbar_view.add_bottom_bar(self._switcher_bar)
-
-        # ---- Pages -------------------------------------------------- #
+        # ---- Content ------------------------------------------------ #
         from mythos.adapters.input.gtk.views.library_view import LibraryView
-        from mythos.adapters.input.gtk.views.downloads_view import DownloadsView
         from mythos.adapters.input.gtk.views.settings_view import SettingsView
         from mythos.adapters.input.gtk.views.login_view import LoginView
 
-        self._login_view = LoginView(container=self._c, on_login=self._on_login)
         self._library_view = LibraryView(container=self._c, window=self)
-        self._downloads_view = DownloadsView(container=self._c)
+        toolbar_view.set_content(self._library_view)
 
-        # Settings open as a modal Adw.PreferencesDialog (not in the stack)
+        # Settings open as a modal Adw.PreferencesDialog
         self._settings_view = SettingsView(container=self._c)
         self._prefs_dialog = Adw.PreferencesDialog()
         self._prefs_dialog.add(self._settings_view)
 
-        # Login uses a separate overlay (not in the stack)
+        # Login uses a separate overlay
+        self._login_view = LoginView(container=self._c, on_login=self._on_login)
         self._login_overlay = Adw.Dialog()
         self._login_overlay.set_title("Sign in to Epic Games")
         self._login_overlay.set_content_width(800)
         self._login_overlay.set_content_height(600)
         self._login_overlay.set_child(self._login_view)
-
-        self._view_stack.add_titled_with_icon(
-            self._library_view, "library", "Library", _ICON_LIBRARY
-        )
-        self._view_stack.add_titled_with_icon(
-            self._downloads_view, "downloads", "Downloads", _ICON_DOWNLOADS
-        )
 
     # ---------------------------------------------------------------- #
     # Session handling                                                   #

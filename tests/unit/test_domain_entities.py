@@ -8,7 +8,7 @@ from __future__ import annotations
 import pytest
 from pathlib import Path
 
-from mythos.domain.entities import AppSettings, DownloadTask, Game, InstalledInfo
+from mythos.domain.entities import AppSettings, Game, InstalledInfo
 from mythos.domain.exceptions import (
     GameAlreadyInstalledError,
     GameAlreadyRunningError,

@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from mythos.adapters.output.legendary.cli_wrapper import LegendaryCliWrapper
+from mythos.adapters.output.legendary.lock_manager import can_clear_lock, clear_lock
 from mythos.adapters.output.legendary.mappers import (
     game_info_to_installed,
     legendary_game_to_domain,
@@ -89,6 +90,10 @@ class LegendaryEpicStore(EpicStorePort):
         except Exception:
             return DiskSize(0)
 
+    def _ensure_no_orphan_lock(self) -> None:
+        if can_clear_lock():
+            clear_lock()
+
     def install_game(
         self,
         app_name: AppName,
@@ -96,6 +101,7 @@ class LegendaryEpicStore(EpicStorePort):
         platform: Platform,
         on_progress: Callable[[Progress], None],
     ) -> InstalledInfo:
+        self._ensure_no_orphan_lock()
         try:
             self._cli.run_and_check(
                 [
@@ -126,6 +132,7 @@ class LegendaryEpicStore(EpicStorePort):
         app_name: AppName,
         on_progress: Callable[[Progress], None],
     ) -> InstalledInfo:
+        self._ensure_no_orphan_lock()
         installed = self._get_installed_game(str(app_name))
         if not installed:
             raise InstallError(f"{app_name} is not installed")
@@ -144,6 +151,7 @@ class LegendaryEpicStore(EpicStorePort):
         app_name: AppName,
         on_progress: Callable[[Progress], None],
     ) -> InstalledInfo:
+        self._ensure_no_orphan_lock()
         installed = self._get_installed_game(str(app_name))
         if not installed:
             raise InstallError(f"{app_name} is not installed")
@@ -158,6 +166,7 @@ class LegendaryEpicStore(EpicStorePort):
             raise InstallError(f"Repair failed for {app_name}: {exc}") from exc
 
     def move_game(self, app_name: AppName, new_path: Path) -> InstalledInfo:
+        self._ensure_no_orphan_lock()
         try:
             self._cli.run(["move", str(app_name), str(new_path), "-y"])
             moved = self._get_installed_game(str(app_name))
@@ -168,29 +177,11 @@ class LegendaryEpicStore(EpicStorePort):
             raise InstallError(f"Move failed for {app_name}: {exc}") from exc
 
     def uninstall_game(self, app_name: AppName) -> None:
+        self._ensure_no_orphan_lock()
         try:
             self._cli.run(["uninstall", str(app_name), "-y"])
         except Exception as exc:
             raise InstallError(f"Uninstall failed for {app_name}: {exc}") from exc
-
-    def cancel_download(self, app_name: AppName) -> None:
-        logger.warning(
-            "cancel_download(%s): legendary CLI has no native cancel API; "
-            "the download will finish the current chunk.",
-            app_name,
-        )
-
-    def pause_download(self, app_name: AppName) -> None:
-        logger.warning(
-            "pause_download(%s): legendary CLI has no pause API — not implemented.",
-            app_name,
-        )
-
-    def resume_download(self, app_name: AppName) -> None:
-        logger.warning(
-            "resume_download(%s): legendary CLI has no resume API — not implemented.",
-            app_name,
-        )
 
     def _get_installed_game(self, app_name: str) -> Optional[InstalledInfo]:
         try:

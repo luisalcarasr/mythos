@@ -16,7 +16,7 @@ from mythos.domain.value_objects import GameStatus
 logger = logging.getLogger(__name__)
 
 _CARD_WIDTH = 220
-_FOOTER_HEIGHT = 60
+_FOOTER_HEIGHT = 90
 _CARD_HEIGHT = int(_CARD_WIDTH * 16 / 9)
 _IMAGE_HEIGHT = _CARD_HEIGHT - _FOOTER_HEIGHT
 
@@ -27,10 +27,13 @@ class GameCard(Gtk.FlowBoxChild):
 
     Layout:
       - Image area (COVER) + settings button (top-right overlay, hover)
-      - Footer: title + action button
+      - Footer: title + action button | progress bar + stats
 
     Right-click or click on the settings button opens a context menu
     with actions contextual to the game state.
+
+    When a download is in progress the action button is replaced by an
+    inline progress bar with downloaded/total and ETA.
     """
 
     def __init__(self, vm: GameViewModel, callbacks: dict[str, callable]) -> None:
@@ -105,6 +108,38 @@ class GameCard(Gtk.FlowBoxChild):
         self._action_btn.set_margin_top(4)
         self._update_action_button()
         footer.append(self._action_btn)
+
+        # Inline progress box (hidden by default)
+        self._progress_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        self._progress_box.set_margin_top(4)
+        self._progress_box.set_visible(False)
+        self._progress_box.add_css_class("card-progress-box")
+
+        self._progress_bar = Gtk.ProgressBar()
+        self._progress_bar.set_show_text(False)
+        self._progress_bar.set_hexpand(True)
+        self._progress_bar.add_css_class("card-progress-bar")
+        self._progress_box.append(self._progress_bar)
+
+        stats_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+        stats_row.add_css_class("card-stats-row")
+
+        self._stats_label = Gtk.Label(label="")
+        self._stats_label.set_xalign(0)
+        self._stats_label.set_hexpand(True)
+        self._stats_label.add_css_class("dim-label")
+        self._stats_label.add_css_class("caption")
+        stats_row.append(self._stats_label)
+
+        self._eta_label = Gtk.Label(label="")
+        self._eta_label.set_xalign(1)
+        self._eta_label.add_css_class("dim-label")
+        self._eta_label.add_css_class("caption")
+        stats_row.append(self._eta_label)
+
+        self._progress_box.append(stats_row)
+        footer.append(self._progress_box)
+
         outer.append(footer)
 
         self._load_cover()
@@ -174,3 +209,64 @@ class GameCard(Gtk.FlowBoxChild):
                 self._callbacks.get("on_launch", lambda _: None)(self._vm)
         elif status == GameStatus.ERROR:
             self._callbacks.get("on_install", lambda _: None)(self._vm)
+
+    # ------------------------------------------------------------ #
+    # Inline progress (called from LibraryView via download events) #
+    # ------------------------------------------------------------ #
+
+    def show_progress(self) -> None:
+        """Replace the action button with an inline progress bar."""
+        self._action_btn.set_visible(False)
+        self._progress_box.set_visible(True)
+
+    def hide_progress(self) -> None:
+        """Restore the action button and hide progress."""
+        self._progress_box.set_visible(False)
+        self._action_btn.set_visible(True)
+        self._update_action_button()
+
+    def update_progress(
+        self,
+        fraction: float,
+        downloaded_bytes: int,
+        total_bytes: int,
+        eta_seconds: float,
+    ) -> None:
+        """Update progress bar fraction, downloaded/total text and ETA."""
+        self._progress_bar.set_fraction(fraction)
+
+        if total_bytes == 0:
+            if downloaded_bytes > 0:
+                self._stats_label.set_label(
+                    f"{self._bytes_human(downloaded_bytes)} / ? GB"
+                )
+            else:
+                self._stats_label.set_label("Calculando...")
+        else:
+            percent = int(fraction * 100)
+            self._stats_label.set_label(
+                f"{self._bytes_human(downloaded_bytes)} / {self._bytes_human(total_bytes)} ({percent}%)"
+            )
+
+        self._eta_label.set_label(self._eta_human(eta_seconds))
+
+    @staticmethod
+    def _bytes_human(b: int) -> str:
+        if b == 0:
+            return "0 B"
+        if b >= 1024 ** 3:
+            return f"{b / (1024 ** 3):.1f} GB"
+        if b >= 1024 ** 2:
+            return f"{b / (1024 ** 2):.1f} MB"
+        if b >= 1024:
+            return f"{b / 1024:.1f} KB"
+        return f"{b} B"
+
+    @staticmethod
+    def _eta_human(seconds: float) -> str:
+        s = int(seconds)
+        if s < 60:
+            return f"{s}s left"
+        if s < 3600:
+            return f"{s // 60}m left"
+        return f"{s // 3600}h {(s % 3600) // 60}m left"

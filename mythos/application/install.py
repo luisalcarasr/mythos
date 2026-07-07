@@ -1,14 +1,11 @@
-# Mythos — Epic Games Launcher
-# Copyright (C) 2024 Luis Alcaras <luisalcarasr@gmail.com>
-# SPDX-License-Identifier: GPL-3.0-or-later
-"""Install / update / repair / move / uninstall use cases."""
-
 from __future__ import annotations
 
 import logging
+import uuid
 from pathlib import Path
 from typing import Optional
 
+from mythos.adapters.output.umu.database import UmuDatabase
 from mythos.domain.entities import InstalledInfo
 from mythos.domain.events import (
     DownloadCompleted,
@@ -38,10 +35,12 @@ class InstallGame(InstallGameUseCase):
         epic_store: EpicStorePort,
         settings_repo: SettingsRepository,
         event_bus: Optional[EventBus] = None,
+        umu_database: Optional[UmuDatabase] = None,
     ) -> None:
         self._store = epic_store
         self._settings = settings_repo
         self._bus = event_bus
+        self._umu_db = umu_database
         self._planner = InstallPlanningService()
 
     def execute(
@@ -49,6 +48,7 @@ class InstallGame(InstallGameUseCase):
         app_name: AppName,
         install_path: Optional[Path] = None,
         platform: Optional[Platform] = None,
+        title: str = "",
     ) -> InstalledInfo:
         settings = self._settings.load()
         resolved_path = self._planner.resolve_install_path(install_path, settings)
@@ -61,20 +61,47 @@ class InstallGame(InstallGameUseCase):
             resolved_platform,
         )
 
+        # Determine total download size upfront for accurate progress display
+        total_bytes = 0
+        try:
+            download_size = self._store.get_download_size(app_name, resolved_platform)
+            total_bytes = download_size.bytes_
+        except Exception:
+            logger.warning("Could not determine download size for %s", app_name)
+
+        task_id = str(uuid.uuid4())
+
         if self._bus:
-            import uuid
-            task_id = str(uuid.uuid4())
-            self._bus.publish(DownloadStarted(task_id=task_id, app_name=str(app_name)))
+            self._bus.publish(
+                DownloadStarted(
+                    task_id=task_id,
+                    app_name=str(app_name),
+                    title=title or str(app_name),
+                    total_bytes=total_bytes,
+                    kind="install",
+                )
+            )
 
         def on_progress(p: Progress) -> None:
-            if self._bus:
-                self._bus.publish(
-                    DownloadProgressed(
-                        task_id=task_id if self._bus else "",
-                        app_name=str(app_name),
-                        progress=p,
-                    )
+            if not self._bus:
+                return
+            # Use pre-fetched total_bytes; fall back to estimation from fraction
+            actual_total = total_bytes
+            if actual_total == 0 and p.fraction > 0 and p.downloaded_bytes > 0:
+                actual_total = int(p.downloaded_bytes / p.fraction)
+            self._bus.publish(
+                DownloadProgressed(
+                    task_id=task_id,
+                    app_name=str(app_name),
+                    progress=Progress(
+                        fraction=p.fraction,
+                        downloaded_bytes=p.downloaded_bytes,
+                        total_bytes=actual_total,
+                        speed_bps=p.speed_bps,
+                        eta_seconds=p.eta_seconds,
+                    ),
                 )
+            )
 
         try:
             info = self._store.install_game(
@@ -87,7 +114,7 @@ class InstallGame(InstallGameUseCase):
             if self._bus:
                 self._bus.publish(
                     DownloadFailed(
-                        task_id=task_id if self._bus else "",
+                        task_id=task_id,
                         app_name=str(app_name),
                         reason=str(exc),
                     )
@@ -97,49 +124,135 @@ class InstallGame(InstallGameUseCase):
         if self._bus:
             self._bus.publish(
                 DownloadCompleted(
-                    task_id=task_id if self._bus else "",
+                    task_id=task_id,
                     app_name=str(app_name),
                 )
             )
             self._bus.publish(GameInstalled(app_name=str(app_name), title=""))
 
+        if self._umu_db:
+            self._umu_db.refresh()
+
         return info
 
 
 class UpdateGame(UpdateGameUseCase):
-    def __init__(self, epic_store: EpicStorePort, event_bus: Optional[EventBus] = None) -> None:
+    def __init__(
+        self,
+        epic_store: EpicStorePort,
+        event_bus: Optional[EventBus] = None,
+        umu_database: Optional[UmuDatabase] = None,
+    ) -> None:
         self._store = epic_store
         self._bus = event_bus
+        self._umu_db = umu_database
 
-    def execute(self, app_name: AppName) -> InstalledInfo:
+    def execute(self, app_name: AppName, title: str = "") -> InstalledInfo:
         logger.info("Updating %s…", app_name)
 
-        def on_progress(p: Progress) -> None:
-            if self._bus:
-                self._bus.publish(
-                    DownloadProgressed(task_id="", app_name=str(app_name), progress=p)
+        task_id = str(uuid.uuid4())
+
+        if self._bus:
+            self._bus.publish(
+                DownloadStarted(
+                    task_id=task_id,
+                    app_name=str(app_name),
+                    title=title or str(app_name),
+                    kind="update",
                 )
+            )
+
+        def on_progress(p: Progress) -> None:
+            if not self._bus:
+                return
+            actual_total = 0
+            if p.fraction > 0 and p.downloaded_bytes > 0:
+                actual_total = int(p.downloaded_bytes / p.fraction)
+            self._bus.publish(
+                DownloadProgressed(
+                    task_id=task_id,
+                    app_name=str(app_name),
+                    progress=Progress(
+                        fraction=p.fraction,
+                        downloaded_bytes=p.downloaded_bytes,
+                        total_bytes=actual_total,
+                        speed_bps=p.speed_bps,
+                        eta_seconds=p.eta_seconds,
+                    ),
+                )
+            )
 
         info = self._store.update_game(app_name=app_name, on_progress=on_progress)
+
+        if self._bus:
+            self._bus.publish(
+                DownloadCompleted(task_id=task_id, app_name=str(app_name))
+            )
+
+        if self._umu_db:
+            self._umu_db.refresh()
+
         logger.info("Update complete for %s", app_name)
         return info
 
 
 class RepairGame(RepairGameUseCase):
-    def __init__(self, epic_store: EpicStorePort, event_bus: Optional[EventBus] = None) -> None:
+    def __init__(
+        self,
+        epic_store: EpicStorePort,
+        event_bus: Optional[EventBus] = None,
+        umu_database: Optional[UmuDatabase] = None,
+    ) -> None:
         self._store = epic_store
         self._bus = event_bus
+        self._umu_db = umu_database
 
-    def execute(self, app_name: AppName) -> InstalledInfo:
+    def execute(self, app_name: AppName, title: str = "") -> InstalledInfo:
         logger.info("Repairing %s…", app_name)
 
-        def on_progress(p: Progress) -> None:
-            if self._bus:
-                self._bus.publish(
-                    DownloadProgressed(task_id="", app_name=str(app_name), progress=p)
-                )
+        task_id = str(uuid.uuid4())
 
-        return self._store.repair_game(app_name=app_name, on_progress=on_progress)
+        if self._bus:
+            self._bus.publish(
+                DownloadStarted(
+                    task_id=task_id,
+                    app_name=str(app_name),
+                    title=title or str(app_name),
+                    kind="repair",
+                )
+            )
+
+        def on_progress(p: Progress) -> None:
+            if not self._bus:
+                return
+            actual_total = 0
+            if p.fraction > 0 and p.downloaded_bytes > 0:
+                actual_total = int(p.downloaded_bytes / p.fraction)
+            self._bus.publish(
+                DownloadProgressed(
+                    task_id=task_id,
+                    app_name=str(app_name),
+                    progress=Progress(
+                        fraction=p.fraction,
+                        downloaded_bytes=p.downloaded_bytes,
+                        total_bytes=actual_total,
+                        speed_bps=p.speed_bps,
+                        eta_seconds=p.eta_seconds,
+                    ),
+                )
+            )
+
+        info = self._store.repair_game(app_name=app_name, on_progress=on_progress)
+
+        if self._bus:
+            self._bus.publish(
+                DownloadCompleted(task_id=task_id, app_name=str(app_name))
+            )
+
+        if self._umu_db:
+            self._umu_db.refresh()
+
+        return info
 
 
 class MoveGame(MoveGameUseCase):

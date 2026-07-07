@@ -11,7 +11,6 @@ source of truth — both ``mythos --fake`` and ``pytest`` import from here.
 
 from mythos.adapters.output.fakes.fake_auth import FakeAuthSession
 from mythos.adapters.output.fakes.fake_cloud_saves import FakeCloudSaves
-from mythos.adapters.output.fakes.fake_download_queue import FakeDownloadQueue
 from mythos.adapters.output.fakes.fake_epic_store import FakeEpicStore
 from mythos.adapters.output.fakes.fake_event_bus import FakeEventBus
 from mythos.adapters.output.fakes.fake_image_cache import FakeImageCache
@@ -22,7 +21,6 @@ from mythos.adapters.output.fakes.fake_wine_runtime import FakeWineRuntime
 __all__ = [
     "FakeAuthSession",
     "FakeCloudSaves",
-    "FakeDownloadQueue",
     "FakeEpicStore",
     "FakeEventBus",
     "FakeImageCache",

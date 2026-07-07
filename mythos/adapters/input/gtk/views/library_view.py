@@ -31,8 +31,16 @@ from mythos.adapters.input.gtk.dialogs.game_settings_dialog import (  # noqa: E4
 from mythos.adapters.input.gtk.dialogs.edit_game_dialog import EditGameDialog  # noqa: E402
 from mythos.adapters.input.gtk.view_models import GameViewModel, LibraryViewModel  # noqa: E402
 from mythos.adapters.input.gtk.widgets.game_card import GameCard  # noqa: E402
-from mythos.domain.events import LibraryRefreshCompleted, LibraryRefreshStarted  # noqa: E402
-from mythos.domain.value_objects import AppName  # noqa: E402
+from mythos.domain.events import (  # noqa: E402
+    DownloadCompleted,
+    DownloadFailed,
+    DownloadProgressed,
+    DownloadStarted,
+    GameUninstalled,
+    LibraryRefreshCompleted,
+    LibraryRefreshStarted,
+)
+from mythos.domain.value_objects import AppName, Progress  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +51,11 @@ class LibraryView(Gtk.Box):
         self._c = container
         self._window = window
         self._vm = LibraryViewModel()
+
+        # Fast lookup: app_name → GameCard (rebuilt on render)
+        self._active_cards: dict[str, GameCard] = {}
+        # Persisted download state across renders: app_name → Progress
+        self._download_states: dict[str, Progress] = {}
 
         self._build_ui()
         self._subscribe_events()
@@ -155,6 +168,8 @@ class LibraryView(Gtk.Box):
         while child := self._flow.get_child_at_index(0):
             self._flow.remove(child)
 
+        self._active_cards.clear()
+
         visible = self._vm.visible_games
         if not visible:
             self._empty_status.set_visible(True)
@@ -177,6 +192,19 @@ class LibraryView(Gtk.Box):
             )
             self._flow.append(card)
 
+            # Re-apply active download state after re-render
+            app_name = vm.app_name
+            self._active_cards[app_name] = card
+            if app_name in self._download_states:
+                card.show_progress()
+                progress = self._download_states[app_name]
+                card.update_progress(
+                    progress.fraction,
+                    progress.downloaded_bytes,
+                    progress.total_bytes,
+                    progress.eta_seconds,
+                )
+
     def _on_game_settings(self, vm: GameViewModel) -> None:
         dialog = GameSettingsDialog(vm, self._c)
         dialog.present(self._window)
@@ -191,7 +219,7 @@ class LibraryView(Gtk.Box):
     def _on_game_install(self, vm: GameViewModel) -> None:
         def _work() -> None:
             try:
-                self._c.install_game_use_case.execute(AppName(vm.app_name))
+                self._c.install_game_use_case.execute(AppName(vm.app_name), title=vm.title)
                 GLib.idle_add(self._refresh_library)
             except Exception as exc:
                 logger.error("Install failed for %s: %s", vm.app_name, exc)
@@ -231,6 +259,71 @@ class LibraryView(Gtk.Box):
         if vm.install_path:
             from gi.repository import Gdk
             Gtk.show_uri(None, f"file://{vm.install_path}", Gdk.CURRENT_TIME)
+
+    # ---------------------------------------------------------------- #
+    # Download event handlers                                            #
+    # ---------------------------------------------------------------- #
+
+    def _on_download_started(self, event: DownloadStarted) -> None:
+        def _on_idle() -> bool:
+            card = self._active_cards.get(event.app_name)
+            if card is None:
+                return GLib.SOURCE_REMOVE
+            card.show_progress()
+            card.update_progress(
+                fraction=0.0,
+                downloaded_bytes=0,
+                total_bytes=event.total_bytes,
+                eta_seconds=0.0,
+            )
+            self._download_states[event.app_name] = Progress(
+                fraction=0.0,
+                downloaded_bytes=0,
+                total_bytes=event.total_bytes,
+                eta_seconds=0.0,
+            )
+            return GLib.SOURCE_REMOVE
+        GLib.idle_add(_on_idle)
+
+    def _on_download_progressed(self, event: DownloadProgressed) -> None:
+        if event.progress is None:
+            return
+        self._download_states[event.app_name] = event.progress
+        card = self._active_cards.get(event.app_name)
+        if card is None:
+            return
+        p = event.progress
+        GLib.idle_add(
+            card.update_progress,
+            p.fraction,
+            p.downloaded_bytes,
+            p.total_bytes,
+            p.eta_seconds,
+        )
+
+    def _on_download_completed(self, event: DownloadCompleted) -> None:
+        self._download_states.pop(event.app_name, None)
+        card = self._active_cards.get(event.app_name)
+        if card is None:
+            return
+        def _on_idle() -> bool:
+            card.hide_progress()
+            self._refresh_library()
+            return GLib.SOURCE_REMOVE
+        GLib.idle_add(_on_idle)
+
+    def _on_download_failed(self, event: DownloadFailed) -> None:
+        self._download_states.pop(event.app_name, None)
+        card = self._active_cards.get(event.app_name)
+        if card is None:
+            return
+        def _on_idle() -> bool:
+            card.hide_progress()
+            return GLib.SOURCE_REMOVE
+        GLib.idle_add(_on_idle)
+
+    def _on_game_uninstalled_event(self, event: GameUninstalled) -> None:
+        GLib.idle_add(self._refresh_library)
 
     def _refresh_library(self) -> None:
         def _work() -> None:
@@ -280,3 +373,8 @@ class LibraryView(Gtk.Box):
         bus = self._c.event_bus
         bus.subscribe(LibraryRefreshStarted, self._on_library_refresh_started)
         bus.subscribe(LibraryRefreshCompleted, self._on_library_refresh_completed)
+        bus.subscribe(DownloadStarted, self._on_download_started)
+        bus.subscribe(DownloadProgressed, self._on_download_progressed)
+        bus.subscribe(DownloadCompleted, self._on_download_completed)
+        bus.subscribe(DownloadFailed, self._on_download_failed)
+        bus.subscribe(GameUninstalled, self._on_game_uninstalled_event)

@@ -20,7 +20,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Callable, Optional
 
-from mythos.domain.entities import AppSettings, DownloadTask, Game, InstalledInfo
+from mythos.domain.entities import AppSettings, Game, InstalledInfo
 from mythos.domain.events import DomainEvent
 from mythos.domain.value_objects import (
     AppName,
@@ -99,18 +99,6 @@ class EpicStorePort(ABC):
     @abstractmethod
     def uninstall_game(self, app_name: AppName) -> None:
         """Remove an installed game from disk."""
-
-    @abstractmethod
-    def cancel_download(self, app_name: AppName) -> None:
-        """Abort an in-progress install or update."""
-
-    @abstractmethod
-    def pause_download(self, app_name: AppName) -> None:
-        """Pause an in-progress install or update."""
-
-    @abstractmethod
-    def resume_download(self, app_name: AppName) -> None:
-        """Resume a paused install or update."""
 
     @abstractmethod
     def get_installed(self) -> list[InstalledInfo]:
@@ -337,45 +325,6 @@ class SettingsRepository(ABC):
     @abstractmethod
     def save(self, settings: AppSettings) -> None:
         """Write *settings* to persistent storage."""
-
-
-# ------------------------------------------------------------------ #
-# Download queue port                                                  #
-# ------------------------------------------------------------------ #
-
-
-class DownloadQueuePort(ABC):
-    """Manages the ordered queue of pending installation tasks."""
-
-    @abstractmethod
-    def enqueue(self, task: DownloadTask) -> None:
-        """Add *task* to the end of the queue."""
-
-    @abstractmethod
-    def cancel(self, task_id: str) -> None:
-        """Remove and abort the task identified by *task_id*."""
-
-    @abstractmethod
-    def list_tasks(self) -> list[DownloadTask]:
-        """Return all current tasks (queued and in-progress)."""
-
-    @abstractmethod
-    def get_active(self) -> Optional[DownloadTask]:
-        """Return the currently-running task, or ``None``."""
-
-    @abstractmethod
-    def pause(self, task_id: str) -> None:
-        """Pause the task identified by *task_id*."""
-
-    @abstractmethod
-    def resume(self, task_id: str) -> None:
-        """Resume a paused task identified by *task_id*."""
-
-
-# ------------------------------------------------------------------ #
-# Runner manager port                                                  #
-# ------------------------------------------------------------------ #
-
 
 
 # ------------------------------------------------------------------ #

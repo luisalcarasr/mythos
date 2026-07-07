@@ -148,34 +148,6 @@ class DownloadFailed(DomainEvent):
 
 
 # ------------------------------------------------------------------ #
-# Runner install events                                                #
-# ------------------------------------------------------------------ #
-
-
-@dataclass(frozen=True)
-class RunnerInstallStarted(DomainEvent):
-    runner_name: str = ""
-    total_bytes: int = 0
-
-
-@dataclass(frozen=True)
-class RunnerInstallProgressed(DomainEvent):
-    runner_name: str = ""
-    progress: "Progress | None" = None
-
-
-@dataclass(frozen=True)
-class RunnerInstallCompleted(DomainEvent):
-    runner_name: str = ""
-
-
-@dataclass(frozen=True)
-class RunnerInstallFailed(DomainEvent):
-    runner_name: str = ""
-    reason: str = ""
-
-
-# ------------------------------------------------------------------ #
 # Cloud save events                                                    #
 # ------------------------------------------------------------------ #
 

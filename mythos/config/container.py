@@ -44,7 +44,6 @@ class Container:
     settings_repo: object = field(default=None, repr=False)
     download_queue_port: object = field(default=None, repr=False)
     event_bus: object = field(default=None, repr=False)
-    runner_manager_port: object = field(default=None, repr=False)
 
     # ------------------------------------------------------------------ #
     # Use cases (application layer)                                        #
@@ -67,8 +66,6 @@ class Container:
     update_settings_use_case: object = field(default=None, repr=False)
     pause_download_use_case: object = field(default=None, repr=False)
     resume_download_use_case: object = field(default=None, repr=False)
-    list_proton_versions_use_case: object = field(default=None, repr=False)
-    install_proton_use_case: object = field(default=None, repr=False)
     set_game_proton_use_case: object = field(default=None, repr=False)
 
 
@@ -85,7 +82,7 @@ def build() -> Container:
     from mythos.adapters.output.legendary.installed_repo import LegendaryInstalledRepo
     from mythos.adapters.output.legendary.cloud_saves import LegendaryCloudSaves
     from mythos.adapters.output.legendary.core_gateway import LegendaryCoreGateway
-    from mythos.adapters.output.wine.runtime import WineRuntimeAdapter
+    from mythos.adapters.output.umu.wine_adapter import UmuWineAdapter
     from mythos.adapters.output.storage.image_cache import DiskImageCache
     from mythos.adapters.output.storage.settings_json import JsonSettingsRepository
     from mythos.adapters.output.process.runner import SubprocessRunner
@@ -104,8 +101,7 @@ def build() -> Container:
     from mythos.application.downloads import EnqueueDownload, CancelDownload, PauseDownload, ResumeDownload
     from mythos.application.saves import SyncSaves
     from mythos.application.settings import GetSettings, UpdateSettings
-    from mythos.application.runners import ListProtonVersions, InstallProton, SetGameProton
-    from mythos.adapters.output.runners.github_runner_manager import GitHubRunnerManager
+    from mythos.application.game_proton import SetGameProton
 
     logger.info("Building dependency container…")
 
@@ -120,7 +116,7 @@ def build() -> Container:
     auth_session_repo = LegendaryAuthSession(gateway=gateway)
     installed_library_repo = LegendaryInstalledRepo(gateway=gateway)
     cloud_save_port = LegendaryCloudSaves(gateway=gateway)
-    wine_runtime_port = WineRuntimeAdapter()
+    wine_runtime_port = UmuWineAdapter(runner=runner, event_bus=event_bus)
     image_cache_port = DiskImageCache()
     settings_repo = JsonSettingsRepository()
     download_queue_port = epic_store  # EpicStore doubles as queue backend
@@ -152,13 +148,14 @@ def build() -> Container:
     move_uc = MoveGame(epic_store=epic_store, event_bus=event_bus)
     uninstall_uc = UninstallGame(epic_store=epic_store, event_bus=event_bus)
 
+    set_game_proton_uc = SetGameProton(installed_repo=installed_library_repo)
+
     launch_uc = LaunchGame(
-        epic_store=epic_store,
         wine_runtime=wine_runtime_port,
+        epic_store=epic_store,
+        installed_repo=installed_library_repo,
         settings_repo=settings_repo,
         event_bus=event_bus,
-        runner_manager=runner_manager,
-        install_proton=install_proton_uc,
     )
 
     enqueue_uc = EnqueueDownload(
@@ -179,11 +176,6 @@ def build() -> Container:
     get_settings_uc = GetSettings(settings_repo=settings_repo)
     update_settings_uc = UpdateSettings(settings_repo=settings_repo)
 
-    runner_manager = GitHubRunnerManager()
-    list_proton_uc = ListProtonVersions(runner_manager=runner_manager)
-    install_proton_uc = InstallProton(runner_manager=runner_manager, event_bus=event_bus)
-    set_game_proton_uc = SetGameProton(installed_repo=installed_library_repo)
-
     logger.info("Container ready.")
 
     return Container(
@@ -196,7 +188,6 @@ def build() -> Container:
         settings_repo=settings_repo,
         download_queue_port=download_queue_port,
         event_bus=event_bus,
-        runner_manager_port=runner_manager,
         login_use_case=login_uc,
         logout_use_case=logout_uc,
         get_session_use_case=get_session_uc,
@@ -215,7 +206,5 @@ def build() -> Container:
         sync_saves_use_case=sync_saves_uc,
         get_settings_use_case=get_settings_uc,
         update_settings_use_case=update_settings_uc,
-        list_proton_versions_use_case=list_proton_uc,
-        install_proton_use_case=install_proton_uc,
         set_game_proton_use_case=set_game_proton_uc,
     )

@@ -2,16 +2,12 @@
 # Copyright (C) 2024 Luis Alcaras <luisalcarasr@gmail.com>
 # SPDX-License-Identifier: GPL-3.0-or-later
 """
-WineRuntimePort — detects Wine, Proton, and CrossOver installations.
+WineRuntimePort — detects Wine, Proton installations.
 
-Strategy (Linux):
+Strategy:
   1. Check for Proton runtimes under ~/.steam/steam/steamapps/common/
   2. Check for system wine via ``which wine``
   3. Check common Proton-GE locations under ~/.local/share/Steam/...
-
-Strategy (macOS):
-  1. CrossOver: /Applications/CrossOver.app
-  2. System wine via Homebrew or ``which wine``
 """
 
 from __future__ import annotations
@@ -32,11 +28,6 @@ logger = logging.getLogger(__name__)
 _STEAM_COMMON = Path.home() / ".steam" / "steam" / "steamapps" / "common"
 _STEAM_COMPAT = Path.home() / ".local" / "share" / "Steam" / "steamapps" / "common"
 
-# CrossOver on macOS
-_CROSSOVER_WINE = Path(
-    "/Applications/CrossOver.app/Contents/SharedSupport/CrossOver/bin/wine"
-)
-
 
 class WineRuntimeAdapter(WineRuntimePort):
     def list_runtimes(self) -> list[dict]:
@@ -44,17 +35,10 @@ class WineRuntimeAdapter(WineRuntimePort):
 
         if sys.platform.startswith("linux"):
             runtimes.extend(self._find_proton_runtimes())
-            wine = self._find_system_wine()
-            if wine:
-                runtimes.append(wine)
 
-        elif sys.platform == "darwin":
-            cx = self._find_crossover()
-            if cx:
-                runtimes.append(cx)
-            wine = self._find_system_wine()
-            if wine:
-                runtimes.append(wine)
+        wine = self._find_system_wine()
+        if wine:
+            runtimes.append(wine)
 
         return runtimes
 
@@ -90,17 +74,6 @@ class WineRuntimeAdapter(WineRuntimePort):
             "path": Path(wine_bin),
             "version": version,
         }
-
-    def _find_crossover(self) -> Optional[dict]:
-        if _CROSSOVER_WINE.exists():
-            version = self._get_version(_CROSSOVER_WINE)
-            return {
-                "name": "CrossOver",
-                "type": WineRunnerType.CROSSOVER,
-                "path": _CROSSOVER_WINE,
-                "version": version,
-            }
-        return None
 
     def _find_proton_runtimes(self) -> list[dict]:
         runtimes: list[dict] = []

@@ -15,7 +15,6 @@ from mythos.domain.value_objects import (
     DiskSize,
     GameStatus,
     InstallPath,
-    LaunchOptions,
     Platform,
     Progress,
 )
@@ -161,11 +160,4 @@ class FakeEpicStore(EpicStorePort):
     def get_install_size(self, app_name: AppName, platform: Platform) -> DiskSize:
         return DiskSize.from_gib(3)
 
-    def launch_game(
-        self,
-        app_name: AppName,
-        launch_options: Optional[LaunchOptions] = None,
-        offline: bool = False,
-    ) -> int:
-        self.launch_calls.append(app_name)
-        return self.fake_pid
+

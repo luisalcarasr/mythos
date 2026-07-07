@@ -18,10 +18,10 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Optional  # noqa: F401 (used in runner use cases)
+from typing import Optional
 
 from mythos.domain.entities import AppSettings, DownloadTask, Game, InstalledInfo
-from mythos.domain.value_objects import AppName, LaunchOptions, Platform, ProtonRelease, SyncDirection, WineRunnerType
+from mythos.domain.value_objects import AppName, LaunchOptions, Platform, SyncDirection, WineRunnerType
 
 
 # ------------------------------------------------------------------ #
@@ -226,30 +226,6 @@ class UpdateSettingsUseCase(ABC):
 # ------------------------------------------------------------------ #
 # Runner management                                                    #
 # ------------------------------------------------------------------ #
-
-
-class ListProtonVersionsUseCase(ABC):
-    @abstractmethod
-    def execute(
-        self, runner_type: Optional[WineRunnerType] = None
-    ) -> list[ProtonRelease]:
-        """
-        Return available Proton / Proton-GE builds.
-
-        Pass ``runner_type`` to filter to a single runner family.
-        Returns installed builds first, then available-for-download.
-        """
-
-
-class InstallProtonUseCase(ABC):
-    @abstractmethod
-    def execute(self, release: ProtonRelease) -> ProtonRelease:
-        """
-        Download, extract, and configure *release*.
-
-        Publishes ``RunnerInstallStarted``, ``RunnerInstallProgressed``,
-        ``RunnerInstallCompleted`` (or ``RunnerInstallFailed``).
-        """
 
 
 class SetGameProtonUseCase(ABC):

@@ -29,8 +29,8 @@ logger = logging.getLogger(__name__)
 # Mapping from legendary platform strings to our Platform enum
 _PLATFORM_MAP: dict[str, Platform] = {
     "Windows": Platform.WINDOWS,
-    "Mac": Platform.MAC,
-    "macOS": Platform.MAC,
+    "Mac": Platform.WINDOWS,
+    "macOS": Platform.WINDOWS,
     "Linux": Platform.LINUX,
 }
 

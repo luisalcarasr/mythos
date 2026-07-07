@@ -24,13 +24,10 @@ from pathlib import Path
 class Platform(str, Enum):
     """Target platform for a game installation."""
     WINDOWS = "Windows"
-    MAC = "Mac"
     LINUX = "Linux"
 
     @staticmethod
     def current() -> Platform:
-        if sys.platform == "darwin":
-            return Platform.MAC
         if sys.platform.startswith("linux"):
             return Platform.LINUX
         return Platform.WINDOWS

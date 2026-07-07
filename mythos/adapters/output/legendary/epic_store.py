@@ -26,7 +26,6 @@ from mythos.domain.value_objects import (
     AppName,
     DiskSize,
     InstallPath,
-    LaunchOptions,
     Platform,
     Progress,
 )
@@ -244,34 +243,4 @@ class LegendaryEpicStore(EpicStorePort):
             "resume_download(%s): legendary has no resume API — not implemented.", app_name
         )
 
-    # ---------------------------------------------------------------- #
-    # Launch                                                             #
-    # ---------------------------------------------------------------- #
 
-    def launch_game(
-        self,
-        app_name: AppName,
-        launch_options: Optional[LaunchOptions] = None,
-        offline: bool = False,
-    ) -> int:
-        try:
-            game = self._gw.core.get_game(str(app_name))
-            igame = self._gw.get_installed_game(str(app_name))
-
-            extra_env: dict[str, str] = {}
-            wrapper: Optional[str] = None
-
-            if launch_options:
-                extra_env = launch_options.extra_env or {}
-                wrapper = launch_options.wrapper_command or None
-
-            _, proc = self._gw.core.launch_game(
-                igame=igame,
-                extra_args=[],
-                offline=offline,
-                wrapper=wrapper,
-                extra_env=extra_env,
-            )
-            return proc.pid
-        except Exception as exc:
-            raise RuntimeError(f"Launch failed for {app_name}: {exc}") from exc

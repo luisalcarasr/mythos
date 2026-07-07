@@ -38,22 +38,10 @@ from mythos.domain.events import (  # noqa: E402
     DownloadPaused,
     DownloadProgressed,
     DownloadResumed,
-    RunnerInstallCompleted,
-    RunnerInstallFailed,
-    RunnerInstallProgressed,
-    RunnerInstallStarted,
 )
-from mythos.domain.value_objects import AppName, GameStatus, Progress  # noqa: E402
+from mythos.domain.value_objects import AppName, GameStatus  # noqa: E402
 
 logger = logging.getLogger(__name__)
-
-# Sentinel task_id prefix used for runner install cards
-_RUNNER_PREFIX = "__runner__"
-
-
-def _runner_task_id(runner_name: str) -> str:
-    return f"{_RUNNER_PREFIX}{runner_name}"
-
 
 def _vm_from_task(task: DownloadTask, image_cache=None) -> DownloadTaskViewModel:
     vm = DownloadTaskViewModel.from_task(task)
@@ -63,33 +51,6 @@ def _vm_from_task(task: DownloadTask, image_cache=None) -> DownloadTaskViewModel
         except Exception:
             pass
     return vm
-
-
-def _runner_vm(
-    runner_name: str,
-    total_bytes: int = 0,
-    fraction: float = 0.0,
-    progress: Optional[Progress] = None,
-) -> DownloadTaskViewModel:
-    p = progress or Progress(
-        fraction=fraction,
-        total_bytes=total_bytes,
-    )
-    return DownloadTaskViewModel(
-        task_id=_runner_task_id(runner_name),
-        app_name=runner_name,
-        title=runner_name,
-        kind="Runner",
-        percent=p.percent,
-        fraction=p.fraction,
-        speed_human=p.speed_human(),
-        downloaded_human=p.downloaded_human,
-        total_human=p.total_human,
-        eta_human=p.eta_human,
-        status=GameStatus.INSTALLING,
-        error_message="",
-        is_runner=True,
-    )
 
 
 class DownloadsView(Gtk.Box):
@@ -148,11 +109,6 @@ class DownloadsView(Gtk.Box):
         bus.subscribe(DownloadCompleted, self._on_completed)
         bus.subscribe(DownloadFailed, self._on_failed)
         bus.subscribe(DownloadCancelled, self._on_cancelled)
-        bus.subscribe(RunnerInstallStarted, self._on_runner_started)
-        bus.subscribe(RunnerInstallProgressed, self._on_runner_progress)
-        bus.subscribe(RunnerInstallCompleted, self._on_runner_completed)
-        bus.subscribe(RunnerInstallFailed, self._on_runner_failed)
-
     def _prepopulate(self) -> None:
         """Show tasks already in the queue when the view is first created."""
         try:
@@ -296,31 +252,4 @@ class DownloadsView(Gtk.Box):
     def _on_cancelled(self, event: DownloadCancelled) -> None:
         self._remove_card(event.task_id)
 
-    # ---------------------------------------------------------------- #
-    # Runner install event handlers                                      #
-    # ---------------------------------------------------------------- #
 
-    def _on_runner_started(self, event: RunnerInstallStarted) -> None:
-        vm = _runner_vm(event.runner_name, total_bytes=event.total_bytes)
-        self._add_card(vm)
-
-    def _on_runner_progress(self, event: RunnerInstallProgressed) -> None:
-        task_id = _runner_task_id(event.runner_name)
-        card = self._cards.get(task_id)
-        if card and event.progress:
-            vm = _runner_vm(
-                event.runner_name,
-                total_bytes=event.progress.total_bytes,
-                progress=event.progress,
-            )
-            card.update_progress(vm)
-
-    def _on_runner_completed(self, event: RunnerInstallCompleted) -> None:
-        card = self._cards.get(_runner_task_id(event.runner_name))
-        if card:
-            card.mark_done()
-
-    def _on_runner_failed(self, event: RunnerInstallFailed) -> None:
-        card = self._cards.get(_runner_task_id(event.runner_name))
-        if card:
-            card.mark_failed(event.reason)

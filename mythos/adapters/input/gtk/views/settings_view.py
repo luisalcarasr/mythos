@@ -96,25 +96,24 @@ class SettingsView(Adw.PreferencesPage):
 
         self.add(downloads_group)
 
-        # ---- Wine --------------------------------------------------- #
-        wine_group = Adw.PreferencesGroup(title="Wine / Proton (Linux & macOS)")
+        # ---- Proton / Wine ----------------------------------------- #
+        wine_group = Adw.PreferencesGroup(title="Proton / Wine (umu)")
 
-        runner_model = Gtk.StringList.new(["None", "Wine", "Proton", "CrossOver"])
+        runner_model = Gtk.StringList.new(["None", "Proton", "Proton-GE"])
         runner_map = {
             WineRunnerType.NONE: 0,
-            WineRunnerType.WINE: 1,
-            WineRunnerType.PROTON: 2,
-            WineRunnerType.CROSSOVER: 3,
+            WineRunnerType.PROTON: 1,
+            WineRunnerType.PROTON_GE: 2,
         }
-        self._runner_row = Adw.ComboRow(title="Default Wine runner", model=runner_model)
+        self._runner_row = Adw.ComboRow(title="Default runner", model=runner_model)
         self._runner_row.set_selected(runner_map.get(self._settings.default_wine_runner, 0))
         self._runner_row.connect("notify::selected", self._on_runner_changed)
         wine_group.add(self._runner_row)
 
-        self._wine_exe_row = Adw.EntryRow(title="Wine executable path")
-        self._wine_exe_row.set_text(str(self._settings.default_wine_executable or ""))
-        self._wine_exe_row.connect("changed", self._on_wine_exe_changed)
-        wine_group.add(self._wine_exe_row)
+        subtitle = Adw.ActionRow()
+        subtitle.set_subtitle("Proton is auto-downloaded by umu. Select which variant to use by default.")
+        subtitle.set_activatable(False)
+        wine_group.add(subtitle)
 
         self.add(wine_group)
 
@@ -167,16 +166,10 @@ class SettingsView(Adw.PreferencesPage):
     def _on_runner_changed(self, row: Adw.ComboRow, _: object) -> None:
         runners = [
             WineRunnerType.NONE,
-            WineRunnerType.WINE,
             WineRunnerType.PROTON,
-            WineRunnerType.CROSSOVER,
+            WineRunnerType.PROTON_GE,
         ]
         self._settings.default_wine_runner = runners[row.get_selected()]
-        self._save()
-
-    def _on_wine_exe_changed(self, row: Adw.EntryRow) -> None:
-        text = row.get_text().strip()
-        self._settings.default_wine_executable = Path(text) if text else None
         self._save()
 
     def _on_choose_install_path(self, btn: Gtk.Button) -> None:

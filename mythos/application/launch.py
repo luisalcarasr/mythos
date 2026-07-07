@@ -6,39 +6,42 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Optional
 
-from mythos.domain.events import GameLaunched
+from mythos.domain.events import GameLaunched, GameStopped
 from mythos.domain.value_objects import AppName, LaunchOptions, WineRunnerType
 from mythos.ports.input import LaunchGameUseCase
-from mythos.ports.output import EpicStorePort, EventBus, RunnerManagerPort, SettingsRepository, WineRuntimePort
+from mythos.ports.output import EpicStorePort, EventBus, InstalledLibraryRepository, SettingsRepository, WineRuntimePort
 
 logger = logging.getLogger(__name__)
 
 
 class LaunchGame(LaunchGameUseCase):
     """
-    Launch a game through the Epic / legendary backend.
+    Launch a game via umu-launcher (Wine/Proton container).
 
-    Applies Wine / Proton configuration from settings or per-call
-    ``launch_options`` override.
+    Gets the game's install info, builds the ``umu-run`` command, and
+    executes it through ``WineRuntimePort`` in the background via
+    ``SubprocessRunner``.
+
+    Publishes ``GameLaunched`` on start and ``GameStopped`` when the
+    game process exits.
     """
 
     def __init__(
         self,
-        epic_store: EpicStorePort,
-        wine_runtime: Optional[WineRuntimePort] = None,
+        wine_runtime: WineRuntimePort,
+        epic_store: Optional[EpicStorePort] = None,
+        installed_repo: Optional[InstalledLibraryRepository] = None,
         settings_repo: Optional[SettingsRepository] = None,
         event_bus: Optional[EventBus] = None,
-        runner_manager: Optional[RunnerManagerPort] = None,
-        install_proton: Optional[object] = None,  # InstallProtonUseCase (avoids circular)
     ) -> None:
-        self._store = epic_store
         self._wine = wine_runtime
+        self._store = epic_store
+        self._installed_repo = installed_repo
         self._settings = settings_repo
         self._bus = event_bus
-        self._runner_manager = runner_manager
-        self._install_proton = install_proton
 
     def execute(
         self,
@@ -46,82 +49,69 @@ class LaunchGame(LaunchGameUseCase):
         launch_options: Optional[LaunchOptions] = None,
         offline: bool = False,
     ) -> int:
-        # Merge per-call options with defaults from settings
         effective_options = self._resolve_options(launch_options)
 
-        # Lazy runner install: if a Proton version is selected but not
-        # yet installed, download it now before launching the game.
-        self._ensure_runner(effective_options)
+        # Get install info
+        installed = self._installed_repo.get(app_name) if self._installed_repo else None
+        if installed is None:
+            raise RuntimeError(f"Cannot launch {app_name}: not installed or no install info")
 
-        logger.info(
-            "Launching %s (offline=%s, wine=%s)…",
-            app_name,
-            offline,
-            effective_options.wine_runner if effective_options else "none",
+        # Build executable path
+        exe = installed.install_path.value / installed.executable if installed.executable else installed.install_path.value
+
+        # Build wineprefix (umu default: ~/Games/umu/<game-id>)
+        wineprefix = Path.home() / "Games" / "umu" / str(app_name)
+
+        # Build launch args (wrapper command is prepended to umu-run)
+        launch_args: list[str] = []
+        if effective_options and effective_options.wrapper_command:
+            launch_args = effective_options.wrapper_command.split()
+
+        # Extra env from config
+        extra_env: dict[str, str] = {}
+        if effective_options and effective_options.extra_env:
+            extra_env = dict(effective_options.extra_env)
+
+        pid = self._wine.execute_game(
+            executable=exe,
+            args=launch_args,
+            wine_runner=effective_options.wine_runner if effective_options else WineRunnerType.NONE,
+            wineprefix=wineprefix,
+            env=extra_env,
+            game_id=f"umu-{app_name}",
+            store="egs",
+            on_exit=lambda code: self._on_game_exited(app_name, code),
         )
 
-        pid = self._store.launch_game(
-            app_name=app_name,
-            launch_options=effective_options,
-            offline=offline,
+        logger.info(
+            "Launched %s via umu (PID=%d, wine=%s, offline=%s)",
+            app_name, pid,
+            effective_options.wine_runner if effective_options else "none",
+            offline,
         )
 
         if self._bus:
-            self._bus.publish(GameLaunched(app_name=str(app_name), title="", pid=pid))
+            self._bus.publish(GameLaunched(
+                app_name=str(app_name), title=installed.app_name.value, pid=pid,
+            ))
 
-        logger.info("Game %s launched with PID %d", app_name, pid)
         return pid
 
-    def _ensure_runner(self, options: Optional[LaunchOptions]) -> None:
-        """
-        If the game's selected Proton version is not installed, download
-        it now (progress published via RunnerInstall* events → Downloads
-        view).  Raises on failure so the launch is aborted.
-        """
-        if not options:
-            return
-        if options.wine_runner not in (WineRunnerType.PROTON, WineRunnerType.PROTON_GE):
-            return
-        if not options.proton_version:
-            return
-        if not self._runner_manager or not self._install_proton:
-            return
-
-        # Find the matching release in the available catalogue
-        available = self._runner_manager.list_available(options.wine_runner)
-        release = next(
-            (r for r in available if r.version == options.proton_version),
-            None,
-        )
-        if release is None:
-            logger.warning(
-                "Runner %s %s not found in catalogue — launching without it.",
-                options.wine_runner.value,
-                options.proton_version,
-            )
-            return
-
-        if self._runner_manager.is_installed(release):
-            return  # already installed, nothing to do
-
-        logger.info(
-            "Runner %s not installed — downloading before launch…",
-            release.name,
-        )
-        # InstallProton.execute() publishes Started/Progressed/Completed/Failed
-        self._install_proton.execute(release)
+    def _on_game_exited(self, app_name: AppName, exit_code: int) -> None:
+        """Called by SubprocessRunner when the umu-run process exits."""
+        logger.info("Game %s exited with code %d", app_name, exit_code)
+        if self._bus:
+            self._bus.publish(GameStopped(app_name=str(app_name), title=""))
 
     def _resolve_options(
-        self, override: Optional[LaunchOptions]
+        self, override: Optional[LaunchOptions],
     ) -> Optional[LaunchOptions]:
         if override:
             return override
-
         if self._settings:
             settings = self._settings.load()
             return LaunchOptions(
                 wine_runner=settings.default_wine_runner,
                 wine_executable=settings.default_wine_executable,
             )
-
         return None

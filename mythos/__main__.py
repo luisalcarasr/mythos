@@ -21,32 +21,6 @@ import logging
 import os
 import sys
 
-# ---------------------------------------------------------------------------
-# macOS: Homebrew GTK4 library path bootstrap
-# ---------------------------------------------------------------------------
-# On macOS with a python.org interpreter, dyld does not search /opt/homebrew
-# by default.  PyGObject's C extension (_gi.so) is linked with an absolute
-# rpath, but libgirepository resolves further libraries by bare name at
-# runtime.  We must have DYLD_LIBRARY_PATH set *before the process starts*, so
-# we re-exec ourselves with the correct environment if it is not already set.
-# This is a no-op on Linux and on macOS when the user already set the var.
-def _ensure_macos_gtk_env() -> None:
-    import os
-    if sys.platform != "darwin":
-        return
-    homebrew_lib = "/opt/homebrew/lib"
-    if os.environ.get("DYLD_LIBRARY_PATH", "").startswith(homebrew_lib):
-        return  # already set — nothing to do
-    os.environ["DYLD_LIBRARY_PATH"] = homebrew_lib
-    os.environ.setdefault(
-        "GI_TYPELIB_PATH", f"{homebrew_lib}/girepository-1.0"
-    )
-    # Re-exec this process so dyld picks up the new DYLD_LIBRARY_PATH.
-    os.execv(sys.executable, [sys.executable] + sys.argv)
-
-
-_ensure_macos_gtk_env()
-
 
 def _setup_logging() -> None:
     logging.basicConfig(
@@ -157,7 +131,6 @@ def main() -> int:
         logger.critical(
             "PyGObject (gi) is not installed. "
             "Install it via your system package manager:\n"
-            "  macOS:  brew install pygobject3 gtk4 libadwaita webkitgtk\n"
             "  Fedora: sudo dnf install python3-gobject gtk4 libadwaita\n"
             "  Debian: sudo apt install python3-gi gir1.2-gtk-4.0 gir1.2-adw-1"
         )

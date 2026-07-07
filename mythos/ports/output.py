@@ -124,24 +124,6 @@ class EpicStorePort(ABC):
     def get_install_size(self, app_name: AppName, platform: Platform) -> DiskSize:
         """Return the estimated installed size for *app_name*."""
 
-    @abstractmethod
-    def launch_game(
-        self,
-        app_name: AppName,
-        launch_options: Optional[LaunchOptions] = None,
-        offline: bool = False,
-    ) -> int:
-        """
-        Launch *app_name* and return the process PID.
-
-        Parameters
-        ----------
-        launch_options:
-            Override per-game launch settings for this run.
-        offline:
-            Launch without Epic online services.
-        """
-
 
 # ------------------------------------------------------------------ #
 # Auth session repository                                              #
@@ -255,7 +237,7 @@ class ImageCachePort(ABC):
 
 
 class WineRuntimePort(ABC):
-    """Discovers and validates Wine / Proton / CrossOver runtimes."""
+    """Discovers, validates, and executes Wine / Proton / CrossOver runtimes."""
 
     @abstractmethod
     def list_runtimes(self) -> list[dict]:
@@ -274,6 +256,38 @@ class WineRuntimePort(ABC):
     @abstractmethod
     def validate(self, executable: Path) -> bool:
         """Return ``True`` if *executable* is a valid Wine binary."""
+
+    @abstractmethod
+    def execute_game(
+        self,
+        executable: Path,
+        args: list[str],
+        wine_runner: WineRunnerType,
+        wineprefix: Path,
+        env: dict[str, str],
+        game_id: Optional[str] = None,
+        store: Optional[str] = None,
+    ) -> int:
+        """
+        Execute a game via Wine/Proton (umu) and return the PID.
+
+        Parameters
+        ----------
+        executable:
+            Path to the game executable (.exe).
+        args:
+            Command-line arguments for the game.
+        wine_runner:
+            Type of Wine runtime (PROTON, PROTON_GE, etc.).
+        wineprefix:
+            Path to the WINEPREFIX.
+        env:
+            Additional environment variables.
+        game_id:
+            Game identifier for protonfixes (e.g. ``"umu-borderlands3"``).
+        store:
+            Store identifier (e.g. ``"egs"``, ``"gog"``).
+        """
 
 
 # ------------------------------------------------------------------ #
@@ -362,57 +376,6 @@ class DownloadQueuePort(ABC):
 # Runner manager port                                                  #
 # ------------------------------------------------------------------ #
 
-
-class RunnerManagerPort(ABC):
-    """
-    Manages Proton and Proton-GE runtime downloads and installations.
-
-    Supported runner types: ``WineRunnerType.PROTON`` and
-    ``WineRunnerType.PROTON_GE``.
-    """
-
-    @abstractmethod
-    def list_available(
-        self,
-        runner_type: Optional[WineRunnerType] = None,
-    ) -> list[ProtonRelease]:
-        """
-        Return known releases available for download.
-
-        Parameters
-        ----------
-        runner_type:
-            Filter to ``PROTON`` or ``PROTON_GE``; ``None`` returns both.
-        """
-
-    @abstractmethod
-    def list_installed(
-        self,
-        runner_type: Optional[WineRunnerType] = None,
-    ) -> list[ProtonRelease]:
-        """Return releases that are already extracted on disk."""
-
-    @abstractmethod
-    def install(
-        self,
-        release: ProtonRelease,
-        on_progress: Callable[[Progress], None],
-    ) -> ProtonRelease:
-        """
-        Download, extract, and configure *release*.
-
-        Calls *on_progress* periodically.  Returns the updated
-        ``ProtonRelease`` with ``installed=True`` and ``install_path``
-        set.  Raises ``RuntimeError`` on failure.
-        """
-
-    @abstractmethod
-    def remove(self, release: ProtonRelease) -> None:
-        """Delete the installed runtime from disk."""
-
-    @abstractmethod
-    def is_installed(self, release: ProtonRelease) -> bool:
-        """Return ``True`` when *release* is already installed."""
 
 
 # ------------------------------------------------------------------ #

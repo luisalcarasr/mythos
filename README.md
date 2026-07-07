@@ -16,7 +16,7 @@ tested without any system libraries installed.
 - Login with your Epic Games account (OAuth via embedded WebView)
 - Browse your full game library with cover art
 - Install, update, repair, move and uninstall games
-- Launch games natively (macOS / Linux) or via Wine / Proton (Linux)
+- Launch games via Wine / Proton (Linux)
 - Download queue with real-time progress
 - Cloud save synchronisation
 - Wine / Proton runtime manager (Linux)
@@ -54,10 +54,6 @@ new adapter that satisfies the same port contract.
 ### System libraries
 
 ```bash
-# macOS (Homebrew) — also installs pkg-config and gobject-introspection
-# needed to build pycairo/pygobject from source via uv
-brew install pygobject3 gtk4 libadwaita pkg-config gobject-introspection
-
 # Fedora / RHEL
 sudo dnf install python3-gobject gtk4 libadwaita webkit2gtk4.1
 
@@ -83,11 +79,6 @@ sudo apt install cargo scdoc make git
 
 > **Note:** These are only required during `uv sync`. The built `umu-run` CLI
 > has no runtime dependencies beyond the GTK4 libraries listed above.
-
-> **macOS note:** `webkitgtk` has no pre-built Homebrew bottle for Apple Silicon
-> and takes hours to build from source. It is only required for the OAuth login
-> WebView. The rest of the application works without it.
-
 ### Python tooling
 
 This project uses [**uv**](https://docs.astral.sh/uv/) for dependency management.
@@ -110,12 +101,6 @@ uv sync
 source .venv/bin/activate
 python -m mythos
 ```
-
-> **macOS note:** `pycairo` and `pygobject` are built from source against the
-> Homebrew GTK4 stack. `uv sync` handles the full build automatically once the
-> system libraries above are installed. The application re-execs itself on first
-> launch to set `DYLD_LIBRARY_PATH=/opt/homebrew/lib` so dyld can find the GTK
-> shared libraries at runtime.
 
 ---
 

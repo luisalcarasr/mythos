@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Optional
 
 from mythos.domain.entities import DownloadTask, Game
-from mythos.domain.value_objects import GameStatus, ProtonRelease, WineRunnerType
+from mythos.domain.value_objects import GameStatus, WineRunnerType
 
 
 @dataclass
@@ -164,36 +164,6 @@ class DownloadTaskViewModel:
         if self.eta_human and self.eta_human != "—":
             parts.append(self.eta_human)
         return "  ·  ".join(parts)
-
-
-@dataclass
-class ProtonReleaseViewModel:
-    """Presentation state for a single Proton / Proton-GE build."""
-    name: str
-    version: str
-    runner_type: WineRunnerType
-    label: str          # e.g. "Proton-GE — GE-Proton9-20"
-    installed: bool
-    download_url: str
-    size_human: str     # e.g. "366.0 MiB"
-
-    @staticmethod
-    def from_release(release: ProtonRelease) -> "ProtonReleaseViewModel":
-        from mythos.domain.value_objects import DiskSize
-        size_human = (
-            DiskSize(release.size_bytes).human_readable()
-            if release.size_bytes
-            else "Unknown size"
-        )
-        return ProtonReleaseViewModel(
-            name=release.name,
-            version=release.version,
-            runner_type=release.runner_type,
-            label=release.label,
-            installed=release.installed,
-            download_url=release.download_url,
-            size_human=size_human,
-        )
 
 
 @dataclass

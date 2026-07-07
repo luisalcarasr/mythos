@@ -8,7 +8,7 @@ Fake composition root for design / UI-development mode.
 output port with an in-memory fake seeded with realistic demo data.
 The real application-layer use cases (mythos/application/*) are wired
 unchanged so the full business logic is exercised — only the external
-adapters (Legendary, disk, network) are replaced.
+adapters (Legendary, umu, disk, network) are replaced.
 
 Activate with:
     MYTHOS_FAKE=1 uv run python -m mythos
@@ -37,7 +37,6 @@ def build_fake() -> Container:
     from mythos.adapters.output.fakes.fake_event_bus import FakeEventBus
     from mythos.adapters.output.fakes.fake_image_cache import FakeImageCache
     from mythos.adapters.output.fakes.fake_installed_repo import FakeInstalledRepo
-    from mythos.adapters.output.fakes.fake_runner_manager import FakeRunnerManager
     from mythos.adapters.output.fakes.fake_settings_repo import FakeSettingsRepo
     from mythos.adapters.output.fakes.fake_wine_runtime import FakeWineRuntime
 
@@ -63,7 +62,7 @@ def build_fake() -> Container:
     from mythos.application.library import ListLibrary, RefreshLibrary
     from mythos.application.saves import SyncSaves
     from mythos.application.settings import GetSettings, UpdateSettings
-    from mythos.application.runners import ListProtonVersions, InstallProton, SetGameProton
+    from mythos.application.game_proton import SetGameProton
 
     logger.info("Building FAKE dependency container (design mode)…")
 
@@ -89,8 +88,6 @@ def build_fake() -> Container:
     image_cache_port = FakeImageCache()
     for game in games:
         image_cache_port.preload(game.app_name, game.title)
-
-    runner_manager = FakeRunnerManager()
 
     # -- Use cases ------------------------------------------------------- #
     login_uc = Login(auth_session_repo=auth_session_repo, event_bus=event_bus)
@@ -119,17 +116,14 @@ def build_fake() -> Container:
     move_uc = MoveGame(epic_store=epic_store, event_bus=event_bus)
     uninstall_uc = UninstallGame(epic_store=epic_store, event_bus=event_bus)
 
-    list_proton_uc = ListProtonVersions(runner_manager=runner_manager)
-    install_proton_uc = InstallProton(runner_manager=runner_manager, event_bus=event_bus)
     set_game_proton_uc = SetGameProton(installed_repo=installed_library_repo)
 
     launch_uc = LaunchGame(
-        epic_store=epic_store,
         wine_runtime=wine_runtime_port,
+        epic_store=epic_store,
+        installed_repo=installed_library_repo,
         settings_repo=settings_repo,
         event_bus=event_bus,
-        runner_manager=runner_manager,
-        install_proton=install_proton_uc,
     )
 
     enqueue_uc = EnqueueDownload(
@@ -162,7 +156,6 @@ def build_fake() -> Container:
         settings_repo=settings_repo,
         download_queue_port=download_queue_port,
         event_bus=event_bus,
-        runner_manager_port=runner_manager,
         login_use_case=login_uc,
         logout_use_case=logout_uc,
         get_session_use_case=get_session_uc,
@@ -181,7 +174,5 @@ def build_fake() -> Container:
         sync_saves_use_case=sync_saves_uc,
         get_settings_use_case=get_settings_uc,
         update_settings_use_case=update_settings_uc,
-        list_proton_versions_use_case=list_proton_uc,
-        install_proton_use_case=install_proton_uc,
         set_game_proton_use_case=set_game_proton_uc,
     )

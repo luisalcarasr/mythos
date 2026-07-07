@@ -117,7 +117,7 @@ class LaunchCommandBuilder:
         if opts.wrapper_command:
             cmd.extend(shlex.split(opts.wrapper_command))
 
-        # Wine / Proton when game is a Windows game on Linux/macOS
+        # Wine / Proton when game is a Windows game on Linux
         if info.platform == Platform.WINDOWS and host != Platform.WINDOWS:
             cmd.extend(self._wine_prefix(opts, host))
 
@@ -143,7 +143,6 @@ class LaunchCommandBuilder:
             )
 
         if runner == WineRunnerType.CROSSOVER:
-            # CrossOver on macOS uses a dedicated binary
             cxrun = Path("/Applications/CrossOver.app/Contents/SharedSupport"
                          "/CrossOver/bin/wine")
             if exe and exe.exists():

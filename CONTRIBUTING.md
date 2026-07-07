@@ -20,12 +20,6 @@ sudo pacman -S rust cargo scdoc make git \
                gtk4 libadwaita gobject-introspection
 ```
 
-#### macOS (Homebrew)
-```bash
-brew install pygobject3 gtk4 libadwaita pkg-config gobject-introspection
-xcode-select --install
-```
-
 #### Debian / Ubuntu
 ```bash
 sudo apt install cargo scdoc make git \

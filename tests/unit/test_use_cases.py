@@ -14,7 +14,7 @@ from mythos.application.install import InstallGame, UninstallGame, UpdateGame
 from mythos.application.launch import LaunchGame
 from mythos.application.library import ListLibrary, RefreshLibrary
 from mythos.application.settings import GetSettings, UpdateSettings
-from mythos.domain.entities import AppSettings, Game
+from mythos.domain.entities import AppSettings, Game, InstalledInfo
 from mythos.domain.events import (
     GameInstalled,
     GameLaunched,
@@ -24,13 +24,15 @@ from mythos.domain.events import (
     UserLoggedIn,
     UserLoggedOut,
 )
-from mythos.domain.value_objects import AppName, GameStatus
+from mythos.domain.value_objects import AppName, DiskSize, GameStatus, InstallPath, LaunchOptions, Platform
 
 from tests.fakes.fake_auth import FakeAuthSession
 from tests.fakes.fake_epic_store import FakeEpicStore
 from tests.fakes.fake_event_bus import FakeEventBus
 from tests.fakes.fake_installed_repo import FakeInstalledRepo
 from tests.fakes.fake_settings_repo import FakeSettingsRepo
+
+from tests.fakes.fake_wine_runtime import FakeWineRuntime
 
 
 # ------------------------------------------------------------------ #
@@ -188,14 +190,30 @@ def test_uninstall_game_publishes_event() -> None:
 
 
 def test_launch_game_returns_pid_and_publishes_event() -> None:
-    store = FakeEpicStore(fake_pid=9999)
+    store = FakeEpicStore()
+    wine = FakeWineRuntime(fake_pid=9999)
+    installed_repo = FakeInstalledRepo(initial=[
+        InstalledInfo(
+            app_name=AppName("Action"),
+            install_path=InstallPath(Path("/fake/games/action")),
+            version="1.0",
+            platform=Platform("Windows"),
+            install_size=DiskSize.from_gib(10),
+            executable="game.exe",
+            launch_options=LaunchOptions(),
+        ),
+    ])
     bus = FakeEventBus()
-    uc = LaunchGame(epic_store=store, event_bus=bus)
+    uc = LaunchGame(
+        wine_runtime=wine,
+        epic_store=store,
+        installed_repo=installed_repo,
+        event_bus=bus,
+    )
 
     pid = uc.execute(AppName("Action"))
 
     assert pid == 9999
-    assert AppName("Action") in store.launch_calls
     events = bus.events_of(GameLaunched)
     assert len(events) == 1
     assert events[0].pid == 9999

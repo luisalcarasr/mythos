@@ -11,7 +11,7 @@ gi.require_version("Adw", "1")
 
 from gi.repository import Adw, Gdk, GLib, Gtk
 
-from mythos.adapters.input.gtk.view_models import GameViewModel, ProtonReleaseViewModel
+from mythos.adapters.input.gtk.view_models import GameViewModel
 from mythos.domain.value_objects import WineRunnerType
 
 if TYPE_CHECKING:
@@ -29,7 +29,7 @@ class GameSettingsDialog(Adw.PreferencesDialog):
 
     Tabs:
       - Game (default): cover image, game info, installation details, actions
-      - Runner: runner-type selector, Proton version dropdown, launch params
+      - Runner: runner-type selector, launch params
       - About: long description (only when present)
     """
 
@@ -46,19 +46,13 @@ class GameSettingsDialog(Adw.PreferencesDialog):
         self._launch_params_row: Adw.EntryRow | None = None
         self._offline_row: Adw.SwitchRow | None = None
 
-        # Runner tab state
-        self._all_releases: list[ProtonReleaseViewModel] = []
-        self._filtered_releases: list[ProtonReleaseViewModel] = []
-        self._version_combo: Adw.ComboRow | None = None
-        self._version_model: Gtk.StringList | None = None
-
         self._build()
 
     def _build(self) -> None:
-        self._build_game_info()       # combined "Game" tab (default)
-        self._build_launch_options()  # own tab
+        self._build_game_info()
+        self._build_launch_options()
         if self._vm.long_description:
-            self._build_about()       # own tab, only when present
+            self._build_about()
 
     # -- Pages -------------------------------------------------------- #
 
@@ -67,7 +61,7 @@ class GameSettingsDialog(Adw.PreferencesDialog):
             title="Runner", icon_name="media-playback-start-symbolic"
         )
 
-        # -- Single "Runner" group: type selector + version dropdown -- #
+        # -- Runner type selector (umu auto-downloads Proton) ---------- #
         runner_group = Adw.PreferencesGroup(title="Runner")
 
         runner_model = Gtk.StringList.new(_RUNNER_LABELS)
@@ -80,11 +74,10 @@ class GameSettingsDialog(Adw.PreferencesDialog):
         self._runner_combo.connect("notify::selected", self._on_runner_type_changed)
         runner_group.add(self._runner_combo)
 
-        self._version_model = Gtk.StringList.new([])
-        self._version_combo = Adw.ComboRow(title="Version")
-        self._version_combo.set_model(self._version_model)
-        self._version_combo.connect("notify::selected", self._on_version_selected)
-        runner_group.add(self._version_combo)
+        subtitle = Adw.ActionRow()
+        subtitle.set_subtitle("umu auto-downloads the selected Proton. No version management needed.")
+        subtitle.set_activatable(False)
+        runner_group.add(subtitle)
 
         page.add(runner_group)
 
@@ -107,92 +100,24 @@ class GameSettingsDialog(Adw.PreferencesDialog):
         page.add(launch_group)
         self.add(page)
 
-        # Populate versions for the current runner type
-        self._load_releases()
-
-    # -- Runner tab helpers ------------------------------------------- #
-
-    def _load_releases(self) -> None:
-        """Load Proton releases in a background thread."""
-        def _fetch() -> None:
-            try:
-                releases = self._c.list_proton_versions_use_case.execute()
-                vms = [ProtonReleaseViewModel.from_release(r) for r in releases]
-                GLib.idle_add(self._on_releases_loaded, vms)
-            except Exception as exc:
-                logger.error("Failed to load Proton releases: %s", exc)
-
-        threading.Thread(target=_fetch, daemon=True, name="runner-list").start()
-
-    def _on_releases_loaded(self, releases: list[ProtonReleaseViewModel]) -> bool:
-        self._all_releases = releases
-        self._refresh_version_dropdown()
-        return GLib.SOURCE_REMOVE
-
     def _current_runner_type(self) -> WineRunnerType:
         idx = self._runner_combo.get_selected() if self._runner_combo else 0
         if 0 <= idx < len(_RUNNER_TYPES):
             return _RUNNER_TYPES[idx]
         return WineRunnerType.NONE
 
-    def _refresh_version_dropdown(self) -> None:
-        if self._version_model is None or self._version_combo is None:
-            return
-
-        runner_type = self._current_runner_type()
-
-        if runner_type == WineRunnerType.NONE:
-            self._filtered_releases = []
-        else:
-            self._filtered_releases = [
-                r for r in self._all_releases if r.runner_type == runner_type
-            ]
-
-        # Rebuild the string list
-        while self._version_model.get_n_items():
-            self._version_model.remove(0)
-
-        if not self._filtered_releases:
-            self._version_model.append("No versions available")
-            self._version_combo.set_sensitive(False)
-            return
-
-        self._version_combo.set_sensitive(True)
-        selected_idx = 0
-        for i, rel in enumerate(self._filtered_releases):
-            # Show only the bare version tag + installed marker or size
-            suffix = " ✓" if rel.installed else f"  ({rel.size_human})"
-            self._version_model.append(f"{rel.version}{suffix}")
-            if rel.version == self._vm.proton_version:
-                selected_idx = i
-
-        self._version_combo.set_selected(selected_idx)
-
     def _on_runner_type_changed(self, combo: Adw.ComboRow, _: object) -> None:
-        self._refresh_version_dropdown()
-
-    def _on_version_selected(self, combo: Adw.ComboRow, _: object) -> None:
-        """Persist the per-game runner selection regardless of install state.
-
-        The actual download happens lazily when the game is launched and
-        the selected version is not yet installed.
-        """
-        idx = combo.get_selected()
-        if not self._filtered_releases or idx >= len(self._filtered_releases):
-            return
-        rel = self._filtered_releases[idx]
+        """Persist runner type immediately."""
+        runner_type = self._current_runner_type()
         if not self._vm.is_installed:
             return
         from mythos.domain.value_objects import AppName
         try:
             self._c.set_game_proton_use_case.execute(
-                AppName(self._vm.app_name), rel.runner_type, rel.version
+                AppName(self._vm.app_name), runner_type,
             )
-            # Keep vm in sync so reopening the dialog shows the right selection
             self._vm = self._vm.__class__(
-                **{**self._vm.__dict__,
-                   "wine_runner": rel.runner_type,
-                   "proton_version": rel.version}
+                **{**self._vm.__dict__, "wine_runner": runner_type}
             )
         except Exception as exc:
             logger.error("Failed to set game runner: %s", exc)

@@ -61,7 +61,7 @@ class GameCard(Gtk.FlowBoxChild):
 
         img_overlay.set_child(self._cover)
 
-        settings_btn = Gtk.Button(icon_name="emblem-system-symbolic")
+        settings_btn = Gtk.Button(icon_name="dialog-information-symbolic")
         settings_btn.add_css_class("flat")
         settings_btn.add_css_class("card-settings")
         settings_btn.set_tooltip_text("Game options")

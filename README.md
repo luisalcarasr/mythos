@@ -65,6 +65,25 @@ sudo dnf install python3-gobject gtk4 libadwaita webkit2gtk4.1
 sudo apt install python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 gir1.2-webkit-6.0
 ```
 
+### Build dependencies (Linux)
+
+`umu-launcher` (the Wine/Proton launcher) is installed from Git and requires
+native build tools:
+
+```bash
+# Fedora (this project is developed in a Fedora Toolbx container)
+sudo dnf install rust cargo scdoc make git
+
+# Arch Linux / Manjaro
+sudo pacman -S rust cargo scdoc make git
+
+# Debian / Ubuntu
+sudo apt install cargo scdoc make git
+```
+
+> **Note:** These are only required during `uv sync`. The built `umu-run` CLI
+> has no runtime dependencies beyond the GTK4 libraries listed above.
+
 > **macOS note:** `webkitgtk` has no pre-built Homebrew bottle for Apple Silicon
 > and takes hours to build from source. It is only required for the OAuth login
 > WebView. The rest of the application works without it.
